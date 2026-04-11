@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-50 text-dark;
+}
+
+.btn-primary {
+  @apply bg-primary text-white px-6 py-2 rounded-full hover:bg-secondary transition duration-300;
+}
+
+.btn-outline {
+  @apply border-2 border-primary text-primary px-6 py-2 rounded-full hover:bg-primary hover:text-white transition duration-300;
+}
