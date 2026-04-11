@@ -1,0 +1,97 @@
+import Layout from '@/components/Layout';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { useCart } from '@/components/CartContext';
+
+export default function Home() {
+  const [featuredProducts, setFeaturedProducts] = useState([]);
+  const [dailyPosts, setDailyPosts] = useState([]);
+  const { addToCart } = useCart();
+
+  useEffect(() => {
+    // Fetch featured products (limit 4)
+    fetch('/api/admin/products')
+      .then(res => res.json())
+      .then(data => setFeaturedProducts(data.slice(0, 4)))
+      .catch(err => console.error('Failed to load products', err));
+
+    // Fetch daily posts
+    fetch('/api/admin/daily-posts')
+      .then(res => res.json())
+      .then(data => setDailyPosts(data.slice(0, 3)))
+      .catch(err => console.error('Failed to load daily posts', err));
+  }, []);
+
+  return (
+    <Layout>
+      {/* Hero Section */}
+      <section className="bg-gradient-to-r from-primary/20 to-secondary/20 py-20">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <h1 className="text-5xl md:text-6xl font-bold text-dark mb-4">Welcome to Bobanest</h1>
+          <p className="text-xl text-gray-600 mb-8">Fresh, handcrafted bubble tea made daily.</p>
+          <Link href="/products" className="btn-primary inline-block">View Menu →</Link>
+        </div>
+      </section>
+
+      {/* Featured Products */}
+      <section className="py-16">
+        <div className="max-w-7xl mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-12">Featured Drinks</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {featuredProducts.map(product => (
+              <div key={product._id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition">
+                <img src={product.imageUrl} alt={product.name} className="w-full h-48 object-cover" />
+                <div className="p-4">
+                  <h3 className="font-bold text-lg">{product.name}</h3>
+                  <p className="text-gray-600 text-sm mt-1">{product.description.substring(0, 60)}...</p>
+                  <div className="flex justify-between items-center mt-3">
+                    <span className="text-primary font-bold">${product.price}</span>
+                    <button
+                      onClick={() => addToCart({ ...product, id: product._id })}
+                      className="text-secondary hover:text-primary"
+                    >
+                      Add to Cart
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {featuredProducts.length === 0 && (
+            <p className="text-center text-gray-500">No products yet. Check back soon!</p>
+          )}
+        </div>
+      </section>
+
+      {/* Daily Specials */}
+      <section className="py-16 bg-gray-100">
+        <div className="max-w-7xl mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-12">Daily Specials</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {dailyPosts.map(post => (
+              <div key={post._id} className="bg-white rounded-lg overflow-hidden shadow">
+                <img src={post.imageUrl} alt={post.title} className="w-full h-56 object-cover" />
+                <div className="p-4">
+                  <h3 className="font-bold text-xl">{post.title}</h3>
+                  <p className="text-gray-600">{post.description}</p>
+                </div>
+              </div>
+            ))}
+            {dailyPosts.length === 0 && (
+              <p className="text-center text-gray-500 col-span-3">No daily specials yet.</p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Catering CTA */}
+      <section className="py-16 bg-dark text-white">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <h2 className="text-3xl font-bold mb-4">Catering for Events</h2>
+          <p className="text-xl mb-8">Make your next event special with Bobanest's catering service.</p>
+          <Link href="/catering" className="btn-primary bg-white text-dark hover:bg-gray-100">Request Catering</Link>
+        </div>
+      </section>
+    </Layout>
+  );
+}

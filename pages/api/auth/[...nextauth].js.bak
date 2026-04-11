@@ -1,0 +1,23 @@
+import NextAuth from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import bcrypt from 'bcryptjs';
+
+export default NextAuth({
+  providers: [
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: { email: { type: 'email' }, password: { type: 'password' } },
+      async authorize(credentials) {
+        const adminEmail = 'admin@bobanest.com';
+        const hashedPassword = '$2a$12$xObdL2n9GDB6rvsbwt2fQelgbXYzHYiu4LMwQVAnObEwILxGl178i';
+        if (credentials.email === adminEmail && bcrypt.compareSync(credentials.password, hashedPassword)) {
+          return { id: '1', name: 'Admin', email: adminEmail };
+        }
+        return null;
+      }
+    })
+  ],
+  session: { strategy: 'jwt' },
+  pages: { signIn: '/admin/login' },
+  secret: process.env.NEXTAUTH_SECRET,
+});

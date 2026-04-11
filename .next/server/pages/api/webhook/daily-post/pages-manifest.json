@@ -1,0 +1,3 @@
+{
+  "/api/webhook/daily-post": "pages/api/webhook/daily-post.js"
+}

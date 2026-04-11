@@ -1,0 +1,39 @@
+// pages/api/auth/[...nextauth].js
+import NextAuth from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import bcrypt from 'bcryptjs';
+
+// Simple hardcoded admin user (only one)
+const ADMIN_USER = {
+  email: 'bobanest.us@gmail.com',
+  // Password: Admin123! (hashed)
+  password: '$2a$12$xObdL2n9GDB6rvsbwt2fQelgbXYzHYiu4LMwQVAnObEwILxGl178i', // Use bcrypt.hashSync('Admin123!', 10) to generate
+};
+
+export default NextAuth({
+  providers: [
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (credentials.email === ADMIN_USER.email) {
+          const isValid = await bcrypt.compare(credentials.password, ADMIN_USER.password);
+          if (isValid) {
+            return { id: '1', name: 'Admin', email: ADMIN_USER.email };
+          }
+        }
+        return null;
+      },
+    }),
+  ],
+  session: {
+    strategy: 'jwt',
+  },
+  pages: {
+    signIn: '/admin/login',
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+});

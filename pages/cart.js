@@ -2,6 +2,28 @@ import Layout from '@/components/Layout';
 import { useCart } from '@/components/CartContext';
 import Link from 'next/link';
 
+// Add at top of file:
+import { loadStripe } from '@stripe/stripe-js';
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+
+// Replace the checkout button handler:
+const handleCheckout = async () => {
+  const stripe = await stripePromise;
+  const response = await fetch('/api/cart/checkout-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: cart.map(item => ({
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+    })) }),
+  });
+  const session = await response.json();
+  await stripe.redirectToCheckout({ sessionId: session.id });
+};
+
+// In the summary section, ensure button onClick={handleCheckout}
+
 export default function CartPage() {
   const { cart, removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
 
@@ -52,7 +74,7 @@ export default function CartPage() {
               <span>Total</span>
               <span>${(totalPrice * 1.07).toFixed(2)}</span>
             </div>
-            <button className="btn-primary w-full mt-6" onClick={() => alert('Order placed! (Demo)')}>Checkout</button>
+            <button className="btn-primary w-full mt-6" onClick={handleCheckout}>Checkout</button>
             <button onClick={clearCart} className="text-gray-500 text-sm mt-4 w-full text-center">Clear Cart</button>
           </div>
         </div>

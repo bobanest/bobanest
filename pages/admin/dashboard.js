@@ -1,0 +1,34 @@
+'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import AdminLayout from '@/components/AdminLayout';
+import Link from 'next/link';
+
+export default function AdminDashboard() {
+  return (
+    <ProtectedRoute>
+      <AdminLayout>
+        <div className="p-8">
+          <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Link href="/admin/products" className="bg-white p-6 rounded shadow hover:shadow-lg transition">
+              <h2 className="text-xl font-bold text-primary">📦 Manage Products</h2>
+              <p className="text-gray-600 mt-2">Add, edit, or remove products</p>
+            </Link>
+            <Link href="/admin/orders" className="bg-white p-6 rounded shadow hover:shadow-lg transition">
+              <h2 className="text-xl font-bold text-primary">🛒 Orders</h2>
+              <p className="text-gray-600 mt-2">View and manage customer orders</p>
+            </Link>
+            <Link href="/admin/reports" className="bg-white p-6 rounded shadow hover:shadow-lg transition">
+              <h2 className="text-xl font-bold text-primary">📊 Reports</h2>
+              <p className="text-gray-600 mt-2">Sales and visitor analytics</p>
+            </Link>
+            <Link href="/admin/daily-posts" className="bg-white p-6 rounded shadow hover:shadow-lg transition">
+              <h2 className="text-xl font-bold text-primary">📸 Daily Posts</h2>
+              <p className="text-gray-600 mt-2">Manage homepage daily specials</p>
+            </Link>
+          </div>
+        </div>
+      </AdminLayout>
+    </ProtectedRoute>
+  );
+}
