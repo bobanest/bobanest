@@ -8,9 +8,20 @@ export default function ProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const { addToCart } = useCart();
 
+  const fetchJson = async (url) => {
+    const res = await fetch(url);
+    const contentType = res.headers.get('content-type') || '';
+
+    if (!res.ok || !contentType.includes('application/json')) {
+      return [];
+    }
+
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  };
+
   useEffect(() => {
-    fetch('/api/admin/products')
-      .then(res => res.json())
+    fetchJson('/api/admin/products')
       .then(data => {
         setProducts(data);
         const uniqueCategories = [...new Set(data.map(p => p.category))];

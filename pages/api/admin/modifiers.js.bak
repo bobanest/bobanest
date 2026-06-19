@@ -1,0 +1,38 @@
+import dbConnect from '@/lib/dbConnect';
+import ModifierGroup from '@/lib/models/Modifier';
+
+export default async function handler(req, res) {
+  await dbConnect();
+  const { id } = req.query;
+
+  if (req.method === 'GET') {
+    const groups = await ModifierGroup.find({}).populate('applicableProducts');
+    return res.status(200).json(groups);
+  }
+
+  if (req.method === 'POST') {
+    try {
+      const group = await ModifierGroup.create(req.body);
+      return res.status(201).json(group);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
+  if (req.method === 'PUT') {
+    try {
+      const group = await ModifierGroup.findByIdAndUpdate(id, req.body, { new: true });
+      return res.status(200).json(group);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
+  if (req.method === 'DELETE') {
+    await ModifierGroup.findByIdAndDelete(id);
+    return res.status(204).end();
+  }
+
+  res.setHeader('Allow', ['GET', 'POST', 'PUT', 'DELETE']);
+  res.status(405).end();
+}

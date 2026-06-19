@@ -7,7 +7,7 @@ import ImageUpload from '@/components/ImageUpload';
 
 export default function AdminProducts() {
   const [products, setProducts] = useState([]);
-  const [form, setForm] = useState({ name: '', description: '', price: '', category: '', imageUrl: '' });
+  const [form, setForm] = useState({ name: '', description: '', price: '', category: '', imageUrl: '', isNewItem: false });
   const [editingId, setEditingId] = useState(null);
 
   useEffect(() => { fetchProducts(); }, []);
@@ -24,13 +24,13 @@ export default function AdminProducts() {
     } else {
       await axios.post('/api/admin/products', form);
     }
-    setForm({ name: '', description: '', price: '', category: '', imageUrl: '' });
+    setForm({ name: '', description: '', price: '', category: '', imageUrl: '', isNewItem: false });
     setEditingId(null);
     fetchProducts();
   };
 
   const handleEdit = (p) => {
-    setForm(p);
+    setForm({ name: p.name, description: p.description, price: p.price, category: p.category, imageUrl: p.imageUrl, isNewItem: p.isNewItem || false });
     setEditingId(p._id);
   };
 
@@ -53,20 +53,29 @@ export default function AdminProducts() {
               <input type="text" placeholder="Category (e.g., Milk Tea)" value={form.category} onChange={e => setForm({...form, category: e.target.value})} className="border p-2 rounded" required />
               <input type="number" step="0.01" placeholder="Price" value={form.price} onChange={e => setForm({...form, price: e.target.value})} className="border p-2 rounded" required />
               <div>
-                <label className="block text-sm mb-1">Product Image</label>
+                <label className="block text-sm mb-1">Product Cup Image</label>
                 <ImageUpload onUpload={(url) => setForm({...form, imageUrl: url})} currentImageUrl={form.imageUrl} />
               </div>
               <textarea placeholder="Description" value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="border p-2 rounded col-span-2" rows="3" required />
+              <label className="flex items-center gap-2 col-span-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={form.isNewItem}
+                  onChange={e => setForm({...form, isNewItem: e.target.checked})}
+                  className="w-4 h-4"
+                />
+                <span className="font-medium text-sm">Mark as <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full ml-1">NEW</span> (shows badge on menu)</span>
+              </label>
             </div>
             <button type="submit" className="mt-4 bg-blue-600 text-white px-4 py-2 rounded">{editingId ? 'Update' : 'Create'}</button>
-            {editingId && <button type="button" onClick={() => { setEditingId(null); setForm({ name: '', description: '', price: '', category: '', imageUrl: '' }); }} className="ml-2 text-gray-500">Cancel</button>}
+            {editingId && <button type="button" onClick={() => { setEditingId(null); setForm({ name: '', description: '', price: '', category: '', imageUrl: '', isNewItem: false }); }} className="ml-2 text-gray-500">Cancel</button>}
           </form>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {products.map(p => (
               <div key={p._id} className="bg-white p-4 rounded shadow flex">
                 <img src={p.imageUrl} alt={p.name} className="w-24 h-24 object-cover rounded mr-4" />
                 <div className="flex-1">
-                  <h3 className="font-bold">{p.name}</h3>
+                  <h3 className="font-bold">{p.name} {p.isNewItem && <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full ml-1">NEW</span>}</h3>
                   <p className="text-sm text-gray-600">{p.category} - ${p.price}</p>
                 </div>
                 <div>

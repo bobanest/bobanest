@@ -8,16 +8,21 @@
     "start": "next start"
   },
   "dependencies": {
+    "@googlemaps/js-api-loader": "^2.0.2",
     "@stripe/stripe-js": "^2.2.0",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
     "mongoose": "^8.0.3",
     "next": "^16.2.3",
     "next-auth": "^4.24.13",
+    "nodemailer": "^7.0.13",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "resend": "^6.10.0",
     "stripe": "^14.10.0",
-    "swr": "^2.2.4"
+    "swr": "^2.2.4",
+    "web-push": "^3.6.7",
+    "yup": "^1.7.1"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.16",

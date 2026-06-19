@@ -9,6 +9,18 @@ export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const { addToCart } = useCart();
 
+  const fetchJson = async (url) => {
+    const res = await fetch(url);
+    const contentType = res.headers.get('content-type') || '';
+
+    if (!res.ok || !contentType.includes('application/json')) {
+      return [];
+    }
+
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  };
+
   const slides = [
     { img: 'https://images.unsplash.com/photo-1558857563-3a9b1c8b3f2e?w=1200', text: 'Fresh Boba Every Day' },
     { img: 'https://images.unsplash.com/photo-1558857563-5f6e6d3b2f3c?w=1200', text: 'Customize Your Drink' },
@@ -16,14 +28,12 @@ export default function Home() {
   ];
 
   useEffect(() => {
-    fetch('/api/admin/products')
-      .then(res => res.json())
+    fetchJson('/api/admin/products')
       .then(data => setFeaturedProducts(data.slice(0, 8)))
-      .catch(err => console.error(err));
-    fetch('/api/admin/daily-posts')
-      .then(res => res.json())
+      .catch(err => console.error('Failed to fetch products', err));
+    fetchJson('/api/admin/daily-posts')
       .then(data => setDailyPosts(data.slice(0, 3)))
-      .catch(err => console.error(err));
+      .catch(err => console.error('Failed to fetch daily posts', err));
 
     const interval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length);

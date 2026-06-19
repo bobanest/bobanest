@@ -1,0 +1,13 @@
+.next/
+.env.local
+.env.local.local
+node_modules/
+.DS_Store
+.vscode/
+*.log
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.vercel/

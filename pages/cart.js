@@ -25,7 +25,7 @@ const handleCheckout = async () => {
 // In the summary section, ensure button onClick={handleCheckout}
 
 export default function CartPage() {
-  const { cart, removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
+  const { cart = [], removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
 
   if (cart.length === 0) {
     return (
@@ -46,7 +46,7 @@ export default function CartPage() {
           <div className="lg:col-span-2">
             {cart.map(item => (
               <div key={item.id} className="flex gap-4 border-b py-4">
-                <img src={item.image} alt={item.name} className="w-24 h-24 object-cover rounded" />
+                <img src={item.imageUrl || item.image} alt={item.name} className="w-24 h-24 object-cover rounded" />
                 <div className="flex-grow">
                   <h3 className="font-bold">{item.name}</h3>
                   <p className="text-primary">${item.price}</p>

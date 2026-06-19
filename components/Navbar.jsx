@@ -1,15 +1,29 @@
+'use client';
 import Link from 'next/link';
 import { useCart } from './CartContext';
 import { useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
 
 export default function Navbar() {
   const { totalItems } = useCart();
-  const [mobileMenu, setMobileMenu] = useState(false);
+  const { data: session } = useSession();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const navLinks = [
+    { href: '/', label: 'Home' },
+    { href: '/products', label: 'Menu' },
+    { href: '/catering', label: 'Catering' },
+    { href: '/contact', label: 'Contact' },
+    { href: '/track-order', label: 'Track Order' },
+    { href: '/loyalty', label: 'Rewards' },
+    { href: '/employee', label: 'Employee Clock' },
+  ];
 
   return (
     <nav className="bg-white shadow-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
+          {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
             <div className="h-10 w-10 bg-primary rounded-full flex items-center justify-center text-white font-bold text-xl">
               B
@@ -17,13 +31,19 @@ export default function Navbar() {
             <span className="text-2xl font-bold text-primary">Bobanest</span>
           </Link>
 
+          {/* Desktop Menu */}
           <div className="hidden md:flex space-x-8">
-            <Link href="/" className="text-dark hover:text-primary">Home</Link>
-            <Link href="/products" className="text-dark hover:text-primary">Products</Link>
-            <Link href="/catering" className="text-dark hover:text-primary">Catering</Link>
-            <Link href="/contact" className="text-dark hover:text-primary">Contact</Link>
+            {navLinks.map(link => (
+              <Link key={link.href} href={link.href} className="text-dark hover:text-primary transition">
+                {link.label}
+              </Link>
+            ))}
+            {session && (
+              <button onClick={() => signOut()} className="text-red-600 hover:text-red-800">Logout</button>
+            )}
           </div>
 
+          {/* Cart & Mobile Button */}
           <div className="flex items-center space-x-4">
             <Link href="/cart" className="relative">
               <svg className="w-6 h-6 text-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -35,23 +55,45 @@ export default function Navbar() {
                 </span>
               )}
             </Link>
-            <button className="md:hidden" onClick={() => setMobileMenu(!mobileMenu)}>
+            <button
+              className="md:hidden p-2 rounded-md focus:outline-none"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                {mobileMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
               </svg>
             </button>
           </div>
         </div>
-
-        {mobileMenu && (
-          <div className="md:hidden py-4 border-t">
-            <Link href="/" className="block py-2 hover:text-primary">Home</Link>
-            <Link href="/products" className="block py-2 hover:text-primary">Products</Link>
-            <Link href="/catering" className="block py-2 hover:text-primary">Catering</Link>
-            <Link href="/contact" className="block py-2 hover:text-primary">Contact</Link>
-          </div>
-        )}
       </div>
+
+      {/* Modern Mobile Menu - Full screen overlay */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-40 bg-white md:hidden">
+          <div className="flex flex-col items-center justify-center h-full space-y-8 text-xl">
+            {navLinks.map(link => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-dark hover:text-primary transition"
+              >
+                {link.label}
+              </Link>
+            ))}
+            {session && (
+              <button onClick={() => signOut()} className="text-red-600 hover:text-red-800">Logout</button>
+            )}
+            <Link href="/cart" onClick={() => setMobileMenuOpen(false)} className="text-dark hover:text-primary">
+              Cart ({totalItems})
+            </Link>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }

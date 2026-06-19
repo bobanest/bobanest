@@ -1,0 +1,23 @@
+import dbConnect from '@/lib/dbConnect';
+import HeroSetting from '@/lib/models/HeroSetting';
+
+export default async function handler(req, res) {
+  await dbConnect();
+  if (req.method === 'GET') {
+    let hero = await HeroSetting.findOne();
+    if (!hero) hero = new HeroSetting();
+    res.json(hero);
+  } else if (req.method === 'POST') {
+    const { imageUrl, title, subtitle } = req.body;
+    let hero = await HeroSetting.findOne();
+    if (!hero) hero = new HeroSetting();
+    hero.imageUrl = imageUrl;
+    hero.title = title;
+    hero.subtitle = subtitle;
+    hero.updatedAt = Date.now();
+    await hero.save();
+    res.json({ success: true });
+  } else {
+    res.status(405).end();
+  }
+}

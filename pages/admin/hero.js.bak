@@ -1,0 +1,14 @@
+const [heroData, setHeroData] = useState({});
+
+useEffect(() => {
+  fetch('/api/admin/hero')
+    .then(res => res.json())
+    .then(data => setHeroData(data))
+    .catch(err => console.error(err));
+}, []);
+
+// In the hero section:
+<div style={{ backgroundImage: `url(${heroData.imageUrl})` }} className="...">
+  <h1>{heroData.title}</h1>
+  <p>{heroData.subtitle}</p>
+</div>

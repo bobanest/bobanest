@@ -1,0 +1,33 @@
+import mongoose from 'mongoose';
+
+// Schema for modifiers inside each order item
+const ModifierItemSchema = new mongoose.Schema({
+  groupName: String,
+  options: [String],
+});
+
+// Schema for individual order items
+const OrderItemSchema = new mongoose.Schema({
+  name: String,
+  price: Number,
+  quantity: Number,
+  modifiers: [ModifierItemSchema],
+});
+
+// Main Order schema
+const OrderSchema = new mongoose.Schema({
+  customerName: String,
+  customerEmail: String,
+  customerPhone: String,
+  items: [OrderItemSchema],
+  totalAmount: Number,
+  status: { type: String, default: 'pending' }, // pending, confirmed, preparing, ready, completed
+  stripePaymentIntentId: String,
+  trackingNumber: { type: String, unique: true, default: () => Math.random().toString(36).substring(2, 10).toUpperCase() },
+  orderType: { type: String, enum: ['pickup', 'delivery'], default: 'pickup' },
+  deliveryAddress: { type: String, default: '' },
+  paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
+  createdAt: { type: Date, default: Date.now },
+});
+
+export default mongoose.models.Order || mongoose.model('Order', OrderSchema);

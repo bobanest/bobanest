@@ -1,40 +1,146 @@
 'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AdminLayout from '@/components/AdminLayout';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-export default function Orders() {
+export default function AdminOrders() {
   const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axios.get('/api/orders/webhook').then(res => setOrders(res.data)).catch(() => setOrders([]));
+    fetchOrders();
   }, []);
+
+  const fetchOrders = async () => {
+    try {
+      const res = await axios.get('/api/orders');
+      setOrders(res.data);
+    } catch (err) {
+      console.error('Failed to fetch orders', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateStatus = async (id, newStatus) => {
+    try {
+      await axios.put('/api/orders', { id, status: newStatus });
+      fetchOrders();
+    } catch (err) {
+      console.error('Failed to update status', err);
+    }
+  };
+
+  const statusColors = {
+    pending: 'yellow',
+    confirmed: 'blue',
+    preparing: 'orange',
+    ready: 'green',
+    completed: 'gray',
+    cancelled: 'red',
+  };
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <AdminLayout>
+          <div className="p-8 text-center">Loading orders...</div>
+        </AdminLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute>
       <AdminLayout>
-        <div className="p-8">
+        <div className="p-4 md:p-8">
           <h1 className="text-3xl font-bold mb-6">Orders</h1>
-          {orders.length === 0 ? (
-            <p>No orders yet.</p>
-          ) : (
-            <table className="w-full bg-white rounded shadow">
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white rounded shadow">
               <thead className="bg-gray-100">
-                <tr><th className="p-2 text-left">Customer</th><th>Total</th><th>Status</th><th>Date</th></tr>
+                <tr>
+                  <th className="p-2 text-left">Order #</th>
+                  <th className="p-2 text-left">Customer</th>
+                  <th className="p-2 text-left">Items</th>
+                  <th className="p-2 text-left">Promotions</th>
+                  <th className="p-2 text-left">Total</th>
+                  <th className="p-2 text-left">Type</th>
+                  <th className="p-2 text-left">Delivery Address</th>
+                  <th className="p-2 text-left">Status</th>
+                  <th className="p-2 text-left">Actions</th>
+                </tr>
               </thead>
               <tbody>
                 {orders.map(order => (
                   <tr key={order._id} className="border-t">
-                    <td className="p-2">{order.customerName}</td>
-                    <td className="p-2">${order.totalAmount}</td>
-                    <td className="p-2">{order.status}</td>
-                    <td className="p-2">{new Date(order.createdAt).toLocaleDateString()}</td>
+                    <td className="p-2 align-top">{order.trackingNumber}</td>
+                    <td className="p-2 align-top">
+                      {order.customerName}<br />
+                      <span className="text-xs text-gray-500">{order.customerEmail}</span><br />
+                      {order.customerPhone && (
+                        <a href={`tel:${order.customerPhone}`} className="text-xs text-blue-600 font-semibold hover:underline">{order.customerPhone}</a>
+                      )}
+                    </td>
+                    <td className="p-2 align-top">
+                      <ul className="list-disc pl-4">
+                        {order.items.map((item, idx) => (
+                          <li key={idx} className="mb-2">
+                            {item.quantity}x {item.name} - ${item.price?.toFixed(2) || '0.00'}
+                            {item.modifiers && item.modifiers.length > 0 && (
+                              <ul className="list-none pl-4 text-xs text-gray-500">
+                                {item.modifiers.map((mod, j) => (
+                                  <li key={j}>{mod.groupName}: {mod.options.join(', ')}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                    <td className="p-2 align-top">
+                      {order.appliedPromotions && order.appliedPromotions.length > 0 ? (
+                        <ul className="list-disc pl-4 text-xs">
+                          {order.appliedPromotions.map(promo => (
+                            <li key={promo.promotionId}>{promo.name}: -${promo.discountAmount.toFixed(2)}</li>
+                          ))}
+                        </ul>
+                      ) : '—'}
+                    </td>
+                    <td className="p-2 align-top">${order.totalAmount?.toFixed(2) || '0.00'}</td>
+                    <td className="p-2 align-top capitalize">{order.orderType}</td>
+                    <td className="p-2 align-top">
+                      {order.orderType === 'delivery' ? order.deliveryAddress : '—'}
+                    </td>
+                    <td className="p-2 align-top">
+                      <span className={`px-2 py-1 rounded text-xs bg-${statusColors[order.status]}-100 text-${statusColors[order.status]}-800`}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="p-2 align-top">
+                      <select
+                        onChange={(e) => updateStatus(order._id, e.target.value)}
+                        defaultValue={order.status}
+                        className="border rounded p-1 text-sm"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="preparing">Preparing</option>
+                        <option value="ready">Ready for pickup</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </td>
                   </tr>
                 ))}
+                {orders.length === 0 && (
+                  <tr>
+                    <td colSpan="9" className="p-4 text-center text-gray-500">No orders found</td>
+                  </tr>
+                )}
               </tbody>
             </table>
-          )}
+          </div>
         </div>
       </AdminLayout>
     </ProtectedRoute>
