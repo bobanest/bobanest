@@ -1,3 +1,0 @@
-{
-  "/api/auth/[...nextauth]": "pages/api/auth/[...nextauth].js"
-}

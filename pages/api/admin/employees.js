@@ -6,7 +6,8 @@ export default async function handler(req, res) {
 
   // simple protection: require EMPLOYEE_API_SECRET as header or body
   const secret = req.headers['x-employee-secret'] || req.body?.secret;
-  if (!process.env.EMPLOYEE_API_SECRET || secret !== process.env.EMPLOYEE_API_SECRET) {
+  const validSecret = process.env.EMPLOYEE_API_SECRET || process.env.NEXT_PUBLIC_EMPLOYEE_API_SECRET;
+  if (!validSecret || secret !== validSecret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
