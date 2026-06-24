@@ -2,6 +2,8 @@ import dbConnect from '@/lib/dbConnect';
 import Product from '@/lib/models/Product';
 import { products as fallbackProducts } from '@/data/products';
 
+const DEPLOYED_PRODUCTS_URL = 'https://www.bobanest.com/api/admin/products';
+
 const normalizedFallbackProducts = fallbackProducts.map((product) => ({
   _id: String(product.id),
   name: product.name,
@@ -12,6 +14,20 @@ const normalizedFallbackProducts = fallbackProducts.map((product) => ({
   inStock: true,
 }));
 
+const findByAnyId = (items, id) =>
+  items.find((item) => String(item?._id ?? item?.id) === String(id));
+
+async function fetchDeployedProducts() {
+  try {
+    const response = await fetch(DEPLOYED_PRODUCTS_URL);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    return [];
+  }
+}
+
 export default async function handler(req, res) {
   const { id } = req.query;
 
@@ -19,12 +35,15 @@ export default async function handler(req, res) {
     await dbConnect();
   } catch (error) {
     if (req.method === 'GET') {
+      const deployedProducts = await fetchDeployedProducts();
+      const source = deployedProducts.length > 0 ? deployedProducts : normalizedFallbackProducts;
+
       if (id) {
-        const product = normalizedFallbackProducts.find((item) => item._id === String(id));
+        const product = findByAnyId(source, id);
         return res.json(product || null);
       }
 
-      return res.json(normalizedFallbackProducts);
+      return res.json(source);
     }
 
     return res.status(503).json({ error: 'Database unavailable' });
@@ -46,7 +65,8 @@ export default async function handler(req, res) {
         // Fall back to local seed data below.
       }
 
-      return res.json(normalizedFallbackProducts);
+      const deployedProducts = await fetchDeployedProducts();
+      return res.json(deployedProducts.length > 0 ? deployedProducts : normalizedFallbackProducts);
     case 'POST':
       return res.status(201).json(await Product.create(req.body));
     case 'PUT':

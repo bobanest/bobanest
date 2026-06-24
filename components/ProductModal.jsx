@@ -49,11 +49,22 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
     const fetchModifiers = async () => {
       try {
         const res = await axios.get('/api/admin/modifiers');
+        const currentProductId = String(product._id || product.id || '');
         // Filter modifiers that apply to this product
-        const applicable = res.data.filter(group =>
-          group.applicableProducts.length === 0 ||
-          group.applicableProducts.some(p => p._id === product._id)
-        );
+        const applicable = (Array.isArray(res.data) ? res.data : []).filter(group => {
+          const applicableProducts = Array.isArray(group.applicableProducts)
+            ? group.applicableProducts
+            : [];
+
+          if (applicableProducts.length === 0) {
+            return true;
+          }
+
+          return applicableProducts.some((p) => {
+            const refId = typeof p === 'object' && p !== null ? p._id : p;
+            return String(refId) === currentProductId;
+          });
+        });
         setModifiers(applicable);
       } catch (err) {
         console.error('Failed to load modifiers', err);

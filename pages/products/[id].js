@@ -26,7 +26,11 @@ export default function ProductDetail() {
     <Layout title={`${product.name} - Bobanest`}>
       <div className="container-custom py-12">
         <div className="grid md:grid-cols-2 gap-12">
-          <img src={product.imageUrl} alt={product.name} className="w-full rounded-lg shadow-lg" />
+          <img
+            src={product.imageUrl}
+            alt={product.name}
+            className="w-full h-[60vh] md:h-[75vh] object-contain bg-gray-50 rounded-lg shadow-lg p-2"
+          />
           <div>
             <h1 className="text-3xl font-bold mb-4">{product.name}</h1>
             <p className="text-gray-600 mb-4">{product.description}</p>

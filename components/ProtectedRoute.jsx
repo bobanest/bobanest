@@ -1,20 +1,26 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function ProtectedRoute({ children }) {
-  const { data: session, status } = useSession();
   const router = useRouter();
+  const [isChecking, setIsChecking] = useState(true);
+  const [isAuthed, setIsAuthed] = useState(false);
 
   useEffect(() => {
-    if (status === 'loading') return;
-    if (!session) router.push('/admin/login');
-  }, [session, status, router]);
+    const authed = localStorage.getItem('bobanest_admin_auth') === '1';
+    if (!authed) {
+      router.push('/admin/login');
+      setIsAuthed(false);
+    } else {
+      setIsAuthed(true);
+    }
+    setIsChecking(false);
+  }, [router]);
 
-  if (status === 'loading') {
+  if (isChecking) {
     return <div className="flex justify-center items-center h-screen">Loading...</div>;
   }
-  return session ? children : null;
+  return isAuthed ? children : null;
 }

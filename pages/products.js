@@ -1,11 +1,13 @@
 import Layout from '@/components/Layout';
 import { useEffect, useState } from 'react';
 import { useCart } from '@/components/CartContext';
+import ProductModal from '@/components/ProductModal';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const { addToCart } = useCart();
 
   const fetchJson = async (url) => {
@@ -65,15 +67,18 @@ export default function ProductsPage() {
         {/* Products Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredProducts.map(product => (
-            <div key={product._id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition">
-              <img src={product.imageUrl} alt={product.name} className="w-full h-56 object-cover" />
+            <div key={product._id || product.id || product.name} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition">
+              <img
+                src={product.imageUrl || product.image || 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800'}
+                alt={product.name}
+                className="w-full h-[40vh] md:h-[48vh] object-contain bg-gray-50 p-2"
+              />
               <div className="p-6">
                 <h3 className="text-xl font-bold">{product.name}</h3>
-                <p className="text-gray-600 mt-2">{product.description}</p>
                 <div className="flex justify-between items-center mt-4">
                   <span className="text-2xl font-bold text-primary">${product.price}</span>
                   <button
-                    onClick={() => addToCart({ ...product, id: product._id })}
+                    onClick={() => setSelectedProduct(product)}
                     className="btn-primary py-2 px-4"
                   >
                     Add to Cart
@@ -86,6 +91,20 @@ export default function ProductsPage() {
 
         {filteredProducts.length === 0 && (
           <p className="text-center text-gray-500 py-12">No products found in this category.</p>
+        )}
+
+        {selectedProduct && (
+          <ProductModal
+            product={selectedProduct}
+            onClose={() => setSelectedProduct(null)}
+            onAddToCart={(configuredProduct) =>
+              addToCart({
+                ...configuredProduct,
+                id: configuredProduct._id || configuredProduct.id,
+                price: configuredProduct.finalPrice ?? configuredProduct.price,
+              })
+            }
+          />
         )}
       </div>
     </Layout>

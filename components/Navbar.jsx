@@ -2,11 +2,9 @@
 import Link from 'next/link';
 import { useCart } from './CartContext';
 import { useState } from 'react';
-import { useSession, signOut } from 'next-auth/react';
 
 export default function Navbar() {
   const { totalItems } = useCart();
-  const { data: session } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
@@ -38,9 +36,6 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            {session && (
-              <button onClick={() => signOut()} className="text-red-600 hover:text-red-800">Logout</button>
-            )}
           </div>
 
           {/* Cart & Mobile Button */}
@@ -85,9 +80,6 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            {session && (
-              <button onClick={() => signOut()} className="text-red-600 hover:text-red-800">Logout</button>
-            )}
             <Link href="/cart" onClick={() => setMobileMenuOpen(false)} className="text-dark hover:text-primary">
               Cart ({totalItems})
             </Link>

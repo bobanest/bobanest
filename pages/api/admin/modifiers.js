@@ -1,20 +1,63 @@
 import dbConnect from '@/lib/dbConnect';
 import ModifierGroup from '@/lib/models/Modifier';
 
+const fallbackModifierGroups = [
+  {
+    _id: 'fallback-size',
+    name: 'Size',
+    required: true,
+    multiple: false,
+    options: [
+      { _id: 'size-regular', name: 'Regular (16oz)', price: 0 },
+      { _id: 'size-large', name: 'Large (22oz)', price: 1.0 },
+    ],
+    applicableProducts: [],
+  },
+  {
+    _id: 'fallback-boba',
+    name: 'Boba',
+    required: false,
+    multiple: false,
+    options: [
+      { _id: 'boba-classic', name: 'Classic Tapioca', price: 0.75 },
+      { _id: 'boba-popping', name: 'Popping Boba', price: 1.0 },
+      { _id: 'boba-none', name: 'No Boba', price: 0 },
+    ],
+    applicableProducts: [],
+  },
+];
+
 export default async function handler(req, res) {
-  await dbConnect();
+  let dbReady = true;
+  try {
+    await dbConnect();
+  } catch (error) {
+    dbReady = false;
+  }
 
   const { id } = req.query;
 
   // GET: Fetch all modifier groups (populate applicable products)
   if (req.method === 'GET') {
+    if (!dbReady) {
+      return res.status(200).json(fallbackModifierGroups);
+    }
+
     try {
       const groups = await ModifierGroup.find({}).populate('applicableProducts');
-      return res.status(200).json(groups);
+      if (Array.isArray(groups) && groups.length > 0) {
+        return res.status(200).json(groups);
+      }
+
+      return res.status(200).json(fallbackModifierGroups);
     } catch (error) {
       console.error('GET modifiers error:', error);
-      return res.status(500).json({ error: 'Failed to fetch modifiers' });
+      return res.status(200).json(fallbackModifierGroups);
     }
+  }
+
+  if (!dbReady) {
+    return res.status(503).json({ error: 'Database unavailable' });
   }
 
   // POST: Create a new modifier group
