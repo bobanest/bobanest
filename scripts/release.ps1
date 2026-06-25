@@ -37,7 +37,12 @@ git push origin main
 git push origin $releaseName
 
 if ($DeployVercel) {
-  vercel deploy --prod --yes --meta "release=$releaseName" --meta "gitTag=$releaseName"
+  vercel deploy --prod --yes `
+    --meta "release=$releaseName" `
+    --meta "gitTag=$releaseName" `
+    --meta "releaseName=$releaseName" `
+    --build-env "BOBANEST_RELEASE_NAME=$releaseName" `
+    --env "BOBANEST_RELEASE_NAME=$releaseName"
 }
 
 Write-Host "Done. Release: $releaseName"
