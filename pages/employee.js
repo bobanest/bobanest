@@ -7,8 +7,38 @@ export default function EmployeeClock() {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState(null);
+  const [employeeMatched, setEmployeeMatched] = useState(false);
 
-  async function handleAction(type) {
+  async function checkStatus(idValue) {
+    const value = idValue.trim();
+    setStatus(null);
+    setEmployeeMatched(false);
+    if (!value) return;
+
+    setChecking(true);
+    try {
+      const res = await fetch(`/api/employees/clock?assignedId=${encodeURIComponent(value)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessageType('error');
+        setMessage(data?.error || 'Employee not found');
+        return;
+      }
+      setEmployeeMatched(true);
+      setStatus(data?.status === 'in' ? 'in' : 'out');
+      setMessage('');
+      setMessageType('');
+    } catch (error) {
+      setMessageType('error');
+      setMessage('Unable to verify employee ID right now.');
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function handleClockAction() {
     if (!assignedId.trim()) {
       setMessageType('error');
       setMessage('Please enter your assigned employee ID.');
@@ -20,7 +50,7 @@ export default function EmployeeClock() {
     setMessageType('');
 
     try {
-      const res = await fetch(`/api/employees/${type}`, {
+      const res = await fetch('/api/employees/clock', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -32,8 +62,10 @@ export default function EmployeeClock() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to submit.');
 
+      const action = data?.type || (status === 'in' ? 'logout' : 'login');
+      setStatus(action === 'login' ? 'in' : 'out');
       setMessageType('success');
-      setMessage(`Success! You have been ${type === 'login' ? 'logged in' : 'logged out'}.`);
+      setMessage(`Success! You have been ${action === 'login' ? 'clocked in' : 'clocked out'}.`);
     } catch (error) {
       setMessageType('error');
       setMessage(error.message || 'Something went wrong.');
@@ -55,29 +87,30 @@ export default function EmployeeClock() {
           <label className="block text-sm font-medium text-slate-700">Assigned Employee ID</label>
           <input
             value={assignedId}
-            onChange={(event) => setAssignedId(event.target.value)}
+            onChange={(event) => {
+              setAssignedId(event.target.value);
+              setMessage('');
+              setMessageType('');
+            }}
+            onBlur={() => checkStatus(assignedId)}
             placeholder="e.g. EMP-1A2B3C"
             className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
           />
 
-          <div className="grid grid-cols-2 gap-4">
+          {checking && <p className="text-sm text-slate-500">Checking employee ID...</p>}
+
+          {employeeMatched && !checking && (
             <button
               type="button"
               disabled={loading}
-              onClick={() => handleAction('login')}
-              className="inline-flex items-center justify-center rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={handleClockAction}
+              className={`w-full inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                status === 'in' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
             >
-              {loading ? 'Working...' : 'Clock In'}
+              {loading ? 'Working...' : status === 'in' ? 'Clock Out' : 'Clock In'}
             </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => handleAction('logout')}
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? 'Working...' : 'Clock Out'}
-            </button>
-          </div>
+          )}
 
           {message && (
             <div className={`rounded-2xl px-4 py-3 text-sm ${messageType === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
@@ -89,8 +122,8 @@ export default function EmployeeClock() {
             <p className="font-semibold text-slate-800">How it works</p>
             <ul className="mt-2 space-y-2 list-disc pl-5">
               <li>Use the ID given by your manager or admin.</li>
-              <li>Press <strong>Clock In</strong> when you start work.</li>
-              <li>Press <strong>Clock Out</strong> when you finish.</li>
+              <li>Enter your ID and click outside the field to verify.</li>
+              <li>The page will show <strong>Clock In</strong> or <strong>Clock Out</strong> based on your current status.</li>
               <li>A confirmation will display instantly.</li>
             </ul>
           </div>

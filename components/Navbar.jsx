@@ -16,7 +16,6 @@ export default function Navbar() {
     { href: '/contact', label: 'Contact' },
     { href: '/track-order', label: 'Track Order' },
     { href: '/loyalty', label: 'Rewards' },
-    { href: '/employee', label: 'Employee Clock' },
   ];
 
   return (
