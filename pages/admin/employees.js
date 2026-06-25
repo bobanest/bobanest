@@ -5,14 +5,19 @@ import { useState, useEffect } from 'react';
 
 export default function AdminEmployees() {
   const [list, setList] = useState([]);
+  const [unpaidHoursByEmployee, setUnpaidHoursByEmployee] = useState({});
   const [form, setForm] = useState({ name: '', email: '', role: 'staff', hourlyRate: 0, assignedId: '' });
   const [loading, setLoading] = useState(true);
+  const [hoursLoading, setHoursLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('');
   const [editingId, setEditingId] = useState(null);
 
-  useEffect(() => { fetchList(); }, []);
+  useEffect(() => {
+    fetchList();
+    fetchUnpaidHours();
+  }, []);
 
   async function fetchList() {
     setLoading(true);
@@ -29,6 +34,46 @@ export default function AdminEmployees() {
       setMsgType('error');
     } finally { 
       setLoading(false); 
+    }
+
+    async function fetchUnpaidHours() {
+      setHoursLoading(true);
+      try {
+        const res = await fetch('/api/admin/attendance?unpaidOnly=true', {
+          headers: { 'x-employee-secret': process.env.NEXT_PUBLIC_EMPLOYEE_API_SECRET || '' }
+        });
+        if (!res.ok) throw new Error('Failed to fetch attendance');
+        const logs = await res.json();
+
+        const byEmployee = {};
+        for (const row of logs) {
+          const employeeId = row?.employee?._id || row?.employee;
+          if (!employeeId) continue;
+          if (!byEmployee[employeeId]) byEmployee[employeeId] = [];
+          byEmployee[employeeId].push(row);
+        }
+
+        const summary = {};
+        Object.entries(byEmployee).forEach(([employeeId, rows]) => {
+          const sorted = rows.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+          let lastLogin = null;
+          let totalMs = 0;
+          sorted.forEach((row) => {
+            if (row.type === 'login') {
+              lastLogin = new Date(row.timestamp);
+            } else if (row.type === 'logout' && lastLogin) {
+              totalMs += Math.max(0, new Date(row.timestamp) - lastLogin);
+              lastLogin = null;
+            }
+          });
+          summary[employeeId] = Math.round(((totalMs / (1000 * 60 * 60)) + Number.EPSILON) * 100) / 100;
+        });
+        setUnpaidHoursByEmployee(summary);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setHoursLoading(false);
+      }
     }
   }
 
@@ -101,7 +146,7 @@ export default function AdminEmployees() {
       <AdminLayout>
         <div className="max-w-6xl mx-auto p-8">
           <h1 className="text-4xl font-bold mb-2">👥 Employee Management</h1>
-          <p className="text-gray-600 mb-8">Create and manage your team members</p>
+          <p className="text-gray-600 mb-8">Create and manage your team members and review HR unpaid hours</p>
 
           {msg && (
             <div className={`p-4 rounded-lg mb-6 ${msgType === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
@@ -208,6 +253,7 @@ export default function AdminEmployees() {
               <div className="bg-white rounded-xl shadow-md overflow-hidden">
                 <div className="p-6 border-b border-gray-200">
                   <h2 className="text-xl font-bold">Employee List ({list.length})</h2>
+                  <p className="text-sm text-gray-500 mt-1">Unpaid hours are from unpaid login/logout records.</p>
                 </div>
 
                 {loading ? (
@@ -229,6 +275,7 @@ export default function AdminEmployees() {
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Role</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Hourly Rate</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Unpaid Hours</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
                         </tr>
                       </thead>
@@ -244,6 +291,9 @@ export default function AdminEmployees() {
                               </span>
                             </td>
                             <td className="px-6 py-4 text-sm font-semibold text-gray-900">${emp.hourlyRate.toFixed(2)}</td>
+                            <td className="px-6 py-4 text-sm font-semibold text-purple-700">
+                              {hoursLoading ? '...' : (unpaidHoursByEmployee[emp._id] || 0).toFixed(2)}
+                            </td>
                             <td className="px-6 py-4 text-sm">
                               <button
                                 onClick={() => editEmployee(emp)}

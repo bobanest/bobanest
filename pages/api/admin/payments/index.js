@@ -14,10 +14,22 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { employeeId, periodStart, periodEnd, hours, gross } = req.body;
+    const { employeeId, periodStart, periodEnd, hours, paidHours, totalHours, gross } = req.body;
     if (!employeeId || !periodStart || !periodEnd) return res.status(400).json({ error: 'Missing fields' });
     try {
-      const p = await Payment.create({ employee: employeeId, periodStart, periodEnd, hours: hours || 0, gross: gross || 0, status: 'pending' });
+      const normalizedHours = Number(hours ?? paidHours ?? 0);
+      const normalizedPaidHours = Number(paidHours ?? normalizedHours);
+      const normalizedTotalHours = Number(totalHours ?? normalizedHours);
+      const p = await Payment.create({
+        employee: employeeId,
+        periodStart,
+        periodEnd,
+        hours: normalizedHours,
+        paidHours: normalizedPaidHours,
+        totalHours: normalizedTotalHours,
+        gross: gross || 0,
+        status: 'pending'
+      });
       return res.json(p);
     } catch (err) {
       console.error('Create payment error:', err);

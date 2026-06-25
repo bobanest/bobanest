@@ -5,14 +5,20 @@ import { useEffect, useMemo, useState } from 'react';
 
 const API_SECRET = process.env.NEXT_PUBLIC_EMPLOYEE_API_SECRET || '';
 
+function round2(n) {
+  return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
+}
+
 export default function AdminPayments() {
   const [payments, setPayments] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [selectedAttendanceIds, setSelectedAttendanceIds] = useState([]);
+  const [payrollRows, setPayrollRows] = useState([]);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [running, setRunning] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [attendanceLoading, setAttendanceLoading] = useState(true);
   const [markingPaid, setMarkingPaid] = useState(false);
@@ -39,7 +45,7 @@ export default function AdminPayments() {
       });
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
-      setPayments(data);
+      setPayments(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
       setMsg('Failed to load payments');
@@ -86,7 +92,7 @@ export default function AdminPayments() {
     }
   }
 
-  async function runPayroll(e) {
+  async function loadPayrollPreview(e) {
     e.preventDefault();
     setMsg('');
     if (!start || !end) {
@@ -103,6 +109,72 @@ export default function AdminPayments() {
       return;
     }
 
+    setPreviewLoading(true);
+    try {
+      const res = await fetch('/api/admin/payments/calculate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-employee-secret': API_SECRET,
+        },
+        body: JSON.stringify({ periodStart: start, periodEnd: end, previewOnly: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load payroll preview');
+
+      const rows = (data.preview || []).map((row) => ({
+        employeeId: row.employee?._id,
+        employeeName: row.employee?.name || 'Unknown',
+        employeeAssignedId: row.employee?.assignedId || '',
+        hourlyRate: Number(row.hourlyRate || 0),
+        totalHours: round2(row.totalHours),
+        payableHours: round2(row.payableHours),
+        gross: round2(row.gross),
+      }));
+      setPayrollRows(rows);
+      setMsg(`Loaded hours for ${rows.length} employees. Adjust payable hours if needed.`);
+      setMsgType('success');
+    } catch (err) {
+      setMsg(err.message || 'Error loading payroll preview');
+      setMsgType('error');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function updatePayableHours(employeeId, value) {
+    const parsed = Number(value);
+    setPayrollRows((prev) =>
+      prev.map((row) => {
+        if (row.employeeId !== employeeId) return row;
+        const nextPayable = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, row.totalHours)) : 0;
+        return {
+          ...row,
+          payableHours: round2(nextPayable),
+          gross: round2(nextPayable * row.hourlyRate),
+        };
+      })
+    );
+  }
+
+  async function runPayroll() {
+    setMsg('');
+    if (!start || !end) {
+      setMsg('Please select both start and end dates');
+      setMsgType('error');
+      return;
+    }
+    if (!payrollRows.length) {
+      setMsg('Please load employee hour preview first.');
+      setMsgType('error');
+      return;
+    }
+
+    const payableHoursByEmployee = {};
+    payrollRows.forEach((row) => {
+      payableHoursByEmployee[row.employeeId] = Number(row.payableHours || 0);
+    });
+
     setRunning(true);
     try {
       const res = await fetch('/api/admin/payments/calculate', {
@@ -111,11 +183,15 @@ export default function AdminPayments() {
           'Content-Type': 'application/json',
           'x-employee-secret': API_SECRET,
         },
-        body: JSON.stringify({ periodStart: start, periodEnd: end }),
+        body: JSON.stringify({
+          periodStart: start,
+          periodEnd: end,
+          payableHoursByEmployee,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
-        setMsg(`Payroll calculated for ${data.payments?.length || 0} employees!`);
+        setMsg(`Payroll created for ${data.payments?.length || 0} employees.`);
         setMsgType('success');
         fetchList();
       } else {
@@ -213,7 +289,11 @@ export default function AdminPayments() {
   }
 
   const totalGross = payments.reduce((sum, p) => sum + (p.gross || 0), 0);
-  const totalHours = payments.reduce((sum, p) => sum + (p.hours || 0), 0);
+  const totalHours = payments.reduce((sum, p) => sum + ((p.paidHours ?? p.hours) || 0), 0);
+  const previewTotalHours = payrollRows.reduce((sum, row) => sum + (row.totalHours || 0), 0);
+  const previewPayableHours = payrollRows.reduce((sum, row) => sum + (row.payableHours || 0), 0);
+  const previewGross = payrollRows.reduce((sum, row) => sum + (row.gross || 0), 0);
+
   const unpaidAttendanceCount = useMemo(
     () => attendance.filter((row) => !row.isPaid).length,
     [attendance]
@@ -224,7 +304,7 @@ export default function AdminPayments() {
       <AdminLayout>
         <div className="max-w-6xl mx-auto p-8">
           <h1 className="text-4xl font-bold mb-2">💰 Payroll Management</h1>
-          <p className="text-gray-600 mb-8">Calculate payroll and manage employee clock records</p>
+          <p className="text-gray-600 mb-8">Review total hours by employee, choose payable hours, then generate payroll.</p>
 
           {msg && (
             <div
@@ -239,8 +319,8 @@ export default function AdminPayments() {
           )}
 
           <div className="bg-white rounded-xl shadow-md p-6 mb-8">
-            <h2 className="text-2xl font-bold mb-4">🧮 Calculate Payroll</h2>
-            <form onSubmit={runPayroll} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <h2 className="text-2xl font-bold mb-4">🧮 Payroll Period & Hours Selection</h2>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Period Start *</label>
                 <input
@@ -248,7 +328,6 @@ export default function AdminPayments() {
                   value={start}
                   onChange={(e) => setStart(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  required
                 />
               </div>
               <div>
@@ -258,15 +337,23 @@ export default function AdminPayments() {
                   value={end}
                   onChange={(e) => setEnd(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  required
                 />
               </div>
               <button
-                type="submit"
-                disabled={running}
+                type="button"
+                onClick={loadPayrollPreview}
+                disabled={previewLoading}
                 className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium px-4 py-2 rounded-lg transition"
               >
-                {running ? 'Calculating...' : 'Calculate Payroll'}
+                {previewLoading ? 'Loading...' : 'Load Employee Hours'}
+              </button>
+              <button
+                type="button"
+                onClick={runPayroll}
+                disabled={running || !payrollRows.length}
+                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium px-4 py-2 rounded-lg transition"
+              >
+                {running ? 'Creating...' : 'Create Payroll'}
               </button>
               <button
                 type="button"
@@ -275,8 +362,70 @@ export default function AdminPayments() {
               >
                 Refresh Clock Records
               </button>
-            </form>
+            </div>
           </div>
+
+          {payrollRows.length > 0 && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-6 border border-indigo-200">
+                  <p className="text-indigo-700 text-sm font-medium">Total Hours (All Employees)</p>
+                  <p className="text-3xl font-bold text-indigo-900">{round2(previewTotalHours).toFixed(2)}</p>
+                </div>
+                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-6 border border-emerald-200">
+                  <p className="text-emerald-700 text-sm font-medium">Selected Payable Hours</p>
+                  <p className="text-3xl font-bold text-emerald-900">{round2(previewPayableHours).toFixed(2)}</p>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
+                  <p className="text-green-700 text-sm font-medium">Payroll Total</p>
+                  <p className="text-3xl font-bold text-green-900">${round2(previewGross).toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-md overflow-hidden mb-8">
+                <div className="p-6 border-b border-gray-200">
+                  <h2 className="text-xl font-bold">Employee Payroll Hours</h2>
+                  <p className="text-sm text-gray-500 mt-1">Adjust payable hours for each employee (0 to total hours).</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Employee</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Employee ID</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Hourly Rate</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Total Hours</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Hours To Pay</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Gross</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {payrollRows.map((row) => (
+                        <tr key={row.employeeId} className="hover:bg-gray-50 transition">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.employeeName}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{row.employeeAssignedId || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">${round2(row.hourlyRate).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">{round2(row.totalHours).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <input
+                              type="number"
+                              min="0"
+                              max={row.totalHours}
+                              step="0.25"
+                              value={row.payableHours}
+                              onChange={(e) => updatePayableHours(row.employeeId, e.target.value)}
+                              className="w-32 border border-gray-300 rounded-lg px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-sm font-bold text-green-700">${round2(row.gross).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="bg-white rounded-xl shadow-md p-6 mb-8">
             <h2 className="text-2xl font-bold mb-4">🕒 Manual Clock In / Clock Out</h2>
@@ -332,12 +481,12 @@ export default function AdminPayments() {
           {payments.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
-                <p className="text-blue-700 text-sm font-medium">Total Hours</p>
-                <p className="text-3xl font-bold text-blue-900">{totalHours.toFixed(2)}</p>
+                <p className="text-blue-700 text-sm font-medium">Total Paid Hours</p>
+                <p className="text-3xl font-bold text-blue-900">{round2(totalHours).toFixed(2)}</p>
               </div>
               <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
                 <p className="text-green-700 text-sm font-medium">Total Payroll</p>
-                <p className="text-3xl font-bold text-green-900">${totalGross.toFixed(2)}</p>
+                <p className="text-3xl font-bold text-green-900">${round2(totalGross).toFixed(2)}</p>
               </div>
               <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-6 border border-amber-200">
                 <p className="text-amber-700 text-sm font-medium">Unpaid Clock Records</p>
@@ -394,9 +543,7 @@ export default function AdminPayments() {
                         <td className="px-4 py-3 text-sm">
                           <span
                             className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                              row.type === 'login'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-rose-100 text-rose-800'
+                              row.type === 'login' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
                             }`}
                           >
                             {row.type === 'login' ? 'Clock In' : 'Clock Out'}
@@ -433,7 +580,7 @@ export default function AdminPayments() {
               </div>
             ) : payments.length === 0 ? (
               <div className="p-12 text-center text-gray-500">
-                <p>No payments calculated yet. Run payroll for a period above to get started.</p>
+                <p>No payments calculated yet. Load employee hours above to get started.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -442,7 +589,8 @@ export default function AdminPayments() {
                     <tr>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Employee</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Period</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Hours</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Total Hours</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Paid Hours</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Gross Pay</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
                     </tr>
@@ -454,13 +602,11 @@ export default function AdminPayments() {
                           {p.employee?.name || 'Unknown'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
-                          {new Date(p.periodStart).toLocaleDateString()} -{' '}
-                          {new Date(p.periodEnd).toLocaleDateString()}
+                          {new Date(p.periodStart).toLocaleDateString()} - {new Date(p.periodEnd).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{p.hours?.toFixed(2)} hrs</td>
-                        <td className="px-6 py-4 text-sm font-bold text-green-700">
-                          ${p.gross?.toFixed(2) || '0.00'}
-                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{round2(p.totalHours ?? p.hours).toFixed(2)} hrs</td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{round2(p.paidHours ?? p.hours).toFixed(2)} hrs</td>
+                        <td className="px-6 py-4 text-sm font-bold text-green-700">${round2(p.gross).toFixed(2)}</td>
                         <td className="px-6 py-4 text-sm">
                           <span
                             className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
