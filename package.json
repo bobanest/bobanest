@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "branch:new": "pwsh -ExecutionPolicy Bypass -File scripts\\new-branch.ps1",
+    "branch:new:push": "pwsh -ExecutionPolicy Bypass -File scripts\\new-branch.ps1 -Push",
     "release:git": "pwsh -ExecutionPolicy Bypass -File scripts\\release.ps1",
     "release:prod": "pwsh -ExecutionPolicy Bypass -File scripts\\release.ps1 -DeployVercel"
   },
