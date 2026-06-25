@@ -290,7 +290,7 @@ export default function AdminEmployees() {
                                 {emp.role}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">${emp.hourlyRate.toFixed(2)}</td>
+                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">${Number(emp.hourlyRate || 0).toFixed(2)}</td>
                             <td className="px-6 py-4 text-sm font-semibold text-purple-700">
                               {hoursLoading ? '...' : (unpaidHoursByEmployee[emp._id] || 0).toFixed(2)}
                             </td>
