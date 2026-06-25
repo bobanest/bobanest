@@ -1,11 +1,17 @@
-self.addEventListener('install', () => {
-  self.skipWaiting();
+self.addEventListener('push', function (event) {
+  const data = event.data ? event.data.json() : {};
+  const title = data.title || 'Bobanest';
+  const options = {
+    body: data.body || '',
+    icon: '/images/logo.png',
+    badge: '/images/logo.png',
+    data: { url: data.url || '/products' },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('fetch', () => {
-  // No-op service worker used to satisfy local registration.
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(clients.openWindow(url));
 });

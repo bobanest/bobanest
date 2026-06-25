@@ -9,28 +9,27 @@ export function CartProvider({ children }) {
   const [promotions, setPromotions] = useState([]);
   const [promotionsLoaded, setPromotionsLoaded] = useState(false);
 
-  const fetchJson = async (url) => {
-    const res = await fetch(url);
-    const contentType = res.headers.get('content-type') || '';
-
-    if (!res.ok || !contentType.includes('application/json')) {
-      return [];
-    }
-
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  };
-
   // Fetch promotions once at startup
   useEffect(() => {
-    fetchJson('/api/admin/promotions?active=true')
+    fetch('/api/admin/promotions?active=true')
+      .then(async (res) => {
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok) {
+          throw new Error(`Promotions request failed (${res.status})`);
+        }
+        if (!contentType.includes('application/json')) {
+          throw new Error('Promotions API did not return JSON');
+        }
+        return res.json();
+      })
       .then(data => {
-        setPromotions(data);
+        setPromotions(Array.isArray(data) ? data : []);
         setPromotionsLoaded(true);
       })
       .catch(err => {
-        setPromotionsLoaded(true);
         console.error('Failed to fetch promotions', err);
+        setPromotions([]);
+        setPromotionsLoaded(true);
       });
   }, []);
 
@@ -200,7 +199,6 @@ export function CartProvider({ children }) {
 
   return (
     <CartContext.Provider value={{
-      cart: cartItems,
       cartItems,
       totalItems,
       totalPrice,
@@ -218,7 +216,6 @@ export function useCart() {
   const context = useContext(CartContext);
   if (!context) {
     return {
-      cart: [],
       cartItems: [],
       totalItems: 0,
       totalPrice: 0,

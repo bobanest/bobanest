@@ -1,5 +1,5 @@
 'use client';
-
+import { signIn } from 'next-auth/react';
 import { useState } from 'react';
 import { useRouter } from 'next/router';
 
@@ -11,13 +11,16 @@ export default function AdminLogin() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (email === 'admin@bobanest.com' && password === 'password123') {
-      localStorage.setItem('bobanest_admin_auth', '1');
+    const result = await signIn('credentials', {
+      redirect: false,
+      email,
+      password,
+    });
+    if (result.error) {
+      setError('Invalid credentials');
+    } else {
       router.push('/admin/dashboard');
-      return;
     }
-
-    setError('Invalid credentials');
   };
 
   return (

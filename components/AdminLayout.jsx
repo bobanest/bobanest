@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { signOut } from 'next-auth/react';
 import { useState, useRef } from 'react';
 
 const NAV_GROUPS = [
@@ -114,12 +115,6 @@ function NavDropdown({ label, links, onLinkClick }) {
 function MobileMenu({ open, onClose }) {
   const [expanded, setExpanded] = useState(null);
   if (!open) return null;
-
-  const logout = () => {
-    localStorage.removeItem('bobanest_admin_auth');
-    window.location.href = '/admin/login';
-  };
-
   return (
     <div className="md:hidden bg-dark border-t border-white/10">
       {NAV_GROUPS.map(group => (
@@ -151,7 +146,7 @@ function MobileMenu({ open, onClose }) {
       ))}
       <div className="px-5 py-3 border-t border-white/10">
         <button
-          onClick={logout}
+          onClick={() => signOut()}
           className="w-full text-sm bg-red-600 hover:bg-red-700 px-3 py-2 rounded font-medium transition-colors text-white"
         >
           Logout
@@ -163,12 +158,6 @@ function MobileMenu({ open, onClose }) {
 
 export default function AdminLayout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const logout = () => {
-    localStorage.removeItem('bobanest_admin_auth');
-    window.location.href = '/admin/login';
-  };
-
   return (
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-dark text-white px-4 md:px-6 py-3 shadow-md">
@@ -182,7 +171,7 @@ export default function AdminLayout({ children }) {
               <NavDropdown key={group.label} label={group.label} links={group.links} />
             ))}
             <button
-              onClick={logout}
+              onClick={() => signOut()}
               className="text-sm bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded font-medium transition-colors"
             >
               Logout

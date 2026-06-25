@@ -12,8 +12,7 @@ export default async function handler(req, res) {
 
   try {
     const secret = req.headers['x-employee-secret'] || req.body.secret;
-    const validSecret = process.env.EMPLOYEE_API_SECRET || process.env.NEXT_PUBLIC_EMPLOYEE_API_SECRET;
-    if (!validSecret || secret !== validSecret) {
+    if (!process.env.EMPLOYEE_API_SECRET || secret !== process.env.EMPLOYEE_API_SECRET) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
@@ -33,11 +32,7 @@ export default async function handler(req, res) {
     const attendance = new Attendance({ employee: employee._id, type: 'logout', ip, userAgent });
     await attendance.save();
 
-    if (!process.env.RESEND_API_KEY) {
-      console.error('RESEND_API_KEY is not configured. Logout notification email cannot be sent.');
-      return res.status(500).json({ success: false, error: 'Email service not configured' });
-    }
-
+    // Send notification email
     const subject = `Employee Logout: ${employee.name}`;
     const html = `
       <p><strong>${employee.name}</strong> (${employee.email}) logged out.</p>
@@ -55,7 +50,6 @@ export default async function handler(req, res) {
       });
     } catch (err) {
       console.error('Email send failed:', err);
-      return res.status(500).json({ success: false, error: 'Failed to send logout email' });
     }
 
     return res.json({ success: true, attendanceId: attendance._id });

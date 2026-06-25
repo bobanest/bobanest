@@ -1,5 +1,6 @@
 import '@/styles/globals.css';
 import { CartProvider } from '@/components/CartContext';
+import { SessionProvider } from 'next-auth/react';
 import { useEffect } from 'react';
 
 function urlBase64ToUint8Array(base64String) {
@@ -28,7 +29,7 @@ async function subscribeToPush(registration) {
   }
 }
 
-export default function App({ Component, pageProps }) {
+export default function App({ Component, pageProps: { session, ...pageProps } }) {
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
     navigator.serviceWorker.register('/sw.js').then(async (registration) => {
@@ -48,8 +49,10 @@ export default function App({ Component, pageProps }) {
   }, []);
 
   return (
-    <CartProvider>
-      <Component {...pageProps} />
-    </CartProvider>
+    <SessionProvider session={session}>
+      <CartProvider>
+        <Component {...pageProps} />
+      </CartProvider>
+    </SessionProvider>
   );
 }

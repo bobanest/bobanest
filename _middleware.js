@@ -1,9 +1,11 @@
-import { NextResponse } from 'next/server';
+import { withAuth } from 'next-auth/middleware';
 
-export default function middleware() {
-  return NextResponse.next();
-}
+export default withAuth({
+  callbacks: {
+    authorized: ({ token }) => !!token,
+  },
+});
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: ['/admin/:path*'], // Only /admin and its subpaths
 };
