@@ -35,45 +35,45 @@ export default function AdminEmployees() {
     } finally { 
       setLoading(false); 
     }
+  }
 
-    async function fetchUnpaidHours() {
-      setHoursLoading(true);
-      try {
-        const res = await fetch('/api/admin/attendance?unpaidOnly=true', {
-          headers: { 'x-employee-secret': process.env.NEXT_PUBLIC_EMPLOYEE_API_SECRET || '' }
-        });
-        if (!res.ok) throw new Error('Failed to fetch attendance');
-        const logs = await res.json();
+  async function fetchUnpaidHours() {
+    setHoursLoading(true);
+    try {
+      const res = await fetch('/api/admin/attendance?unpaidOnly=true', {
+        headers: { 'x-employee-secret': process.env.NEXT_PUBLIC_EMPLOYEE_API_SECRET || '' }
+      });
+      if (!res.ok) throw new Error('Failed to fetch attendance');
+      const logs = await res.json();
 
-        const byEmployee = {};
-        for (const row of logs) {
-          const employeeId = row?.employee?._id || row?.employee;
-          if (!employeeId) continue;
-          if (!byEmployee[employeeId]) byEmployee[employeeId] = [];
-          byEmployee[employeeId].push(row);
-        }
-
-        const summary = {};
-        Object.entries(byEmployee).forEach(([employeeId, rows]) => {
-          const sorted = rows.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-          let lastLogin = null;
-          let totalMs = 0;
-          sorted.forEach((row) => {
-            if (row.type === 'login') {
-              lastLogin = new Date(row.timestamp);
-            } else if (row.type === 'logout' && lastLogin) {
-              totalMs += Math.max(0, new Date(row.timestamp) - lastLogin);
-              lastLogin = null;
-            }
-          });
-          summary[employeeId] = Math.round(((totalMs / (1000 * 60 * 60)) + Number.EPSILON) * 100) / 100;
-        });
-        setUnpaidHoursByEmployee(summary);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setHoursLoading(false);
+      const byEmployee = {};
+      for (const row of logs) {
+        const employeeId = row?.employee?._id || row?.employee;
+        if (!employeeId) continue;
+        if (!byEmployee[employeeId]) byEmployee[employeeId] = [];
+        byEmployee[employeeId].push(row);
       }
+
+      const summary = {};
+      Object.entries(byEmployee).forEach(([employeeId, rows]) => {
+        const sorted = rows.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        let lastLogin = null;
+        let totalMs = 0;
+        sorted.forEach((row) => {
+          if (row.type === 'login') {
+            lastLogin = new Date(row.timestamp);
+          } else if (row.type === 'logout' && lastLogin) {
+            totalMs += Math.max(0, new Date(row.timestamp) - lastLogin);
+            lastLogin = null;
+          }
+        });
+        summary[employeeId] = Math.round(((totalMs / (1000 * 60 * 60)) + Number.EPSILON) * 100) / 100;
+      });
+      setUnpaidHoursByEmployee(summary);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setHoursLoading(false);
     }
   }
 
