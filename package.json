@@ -6,8 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "release:git": "powershell -ExecutionPolicy Bypass -File scripts\\release.ps1",
-    "release:prod": "powershell -ExecutionPolicy Bypass -File scripts\\release.ps1 -DeployVercel"
+    "release:git": "pwsh -ExecutionPolicy Bypass -File scripts\\release.ps1",
+    "release:prod": "pwsh -ExecutionPolicy Bypass -File scripts\\release.ps1 -DeployVercel"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
