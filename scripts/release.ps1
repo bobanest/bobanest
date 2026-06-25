@@ -1,8 +1,8 @@
-$ErrorActionPreference = 'Stop'
-
 param(
   [switch]$DeployVercel
 )
+
+$ErrorActionPreference = 'Stop'
 
 function Get-ReleaseName {
   $datePart = Get-Date -Format 'ddMMyy'
