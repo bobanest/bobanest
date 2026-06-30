@@ -1,11 +1,15 @@
 import Navbar from './Navbar';
 import Footer from './Footer';
 import FacebookPixel from './FacebookPixel';
+import LiveScoreTicker from './LiveScoreTicker';
 import Head from 'next/head';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 
 export default function Layout({ children, title = 'Bobanest – Best Bubble Tea' }) {
   const [fbSettings, setFbSettings] = useState({ pixelId: '', enabled: false });
+  const router = useRouter();
+  const isHomePage = router.pathname === '/';
 
   useEffect(() => {
     // Load Facebook tracking settings
@@ -25,6 +29,7 @@ export default function Layout({ children, title = 'Bobanest – Best Bubble Tea
       </Head>
       <FacebookPixel pixelId={fbSettings.pixelId} enabled={fbSettings.enabled} />
       <div className="flex flex-col min-h-screen">
+        {isHomePage && <LiveScoreTicker />}
         <Navbar />
         <main className="flex-grow">{children}</main>
         <Footer />
