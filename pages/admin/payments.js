@@ -15,6 +15,7 @@ export default function AdminPayments() {
   const [attendance, setAttendance] = useState([]);
   const [selectedAttendanceIds, setSelectedAttendanceIds] = useState([]);
   const [payrollRows, setPayrollRows] = useState([]);
+  const [selectedPayrollEmployeeIds, setSelectedPayrollEmployeeIds] = useState([]);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [running, setRunning] = useState(false);
@@ -132,6 +133,7 @@ export default function AdminPayments() {
         gross: round2(row.gross),
       }));
       setPayrollRows(rows);
+      setSelectedPayrollEmployeeIds(rows.filter((r) => r.totalHours > 0).map((r) => r.employeeId));
       setMsg(`Loaded hours for ${rows.length} employees. Adjust payable hours if needed.`);
       setMsgType('success');
     } catch (err) {
@@ -157,6 +159,12 @@ export default function AdminPayments() {
     );
   }
 
+  function togglePayrollEmployee(employeeId) {
+    setSelectedPayrollEmployeeIds((prev) =>
+      prev.includes(employeeId) ? prev.filter((id) => id !== employeeId) : [...prev, employeeId]
+    );
+  }
+
   async function runPayroll() {
     setMsg('');
     if (!start || !end) {
@@ -171,9 +179,17 @@ export default function AdminPayments() {
     }
 
     const payableHoursByEmployee = {};
-    payrollRows.forEach((row) => {
-      payableHoursByEmployee[row.employeeId] = Number(row.payableHours || 0);
-    });
+    payrollRows
+      .filter((row) => selectedPayrollEmployeeIds.includes(row.employeeId))
+      .forEach((row) => {
+        payableHoursByEmployee[row.employeeId] = Number(row.payableHours || 0);
+      });
+
+    if (!Object.keys(payableHoursByEmployee).length) {
+      setMsg('Please select at least one employee to pay.');
+      setMsgType('error');
+      return;
+    }
 
     setRunning(true);
     try {
@@ -290,9 +306,10 @@ export default function AdminPayments() {
 
   const totalGross = payments.reduce((sum, p) => sum + (p.gross || 0), 0);
   const totalHours = payments.reduce((sum, p) => sum + ((p.paidHours ?? p.hours) || 0), 0);
-  const previewTotalHours = payrollRows.reduce((sum, row) => sum + (row.totalHours || 0), 0);
-  const previewPayableHours = payrollRows.reduce((sum, row) => sum + (row.payableHours || 0), 0);
-  const previewGross = payrollRows.reduce((sum, row) => sum + (row.gross || 0), 0);
+  const selectedPayrollRows = payrollRows.filter((row) => selectedPayrollEmployeeIds.includes(row.employeeId));
+  const previewTotalHours = selectedPayrollRows.reduce((sum, row) => sum + (row.totalHours || 0), 0);
+  const previewPayableHours = selectedPayrollRows.reduce((sum, row) => sum + (row.payableHours || 0), 0);
+  const previewGross = selectedPayrollRows.reduce((sum, row) => sum + (row.gross || 0), 0);
 
   const unpaidAttendanceCount = useMemo(
     () => attendance.filter((row) => !row.isPaid).length,
@@ -385,12 +402,13 @@ export default function AdminPayments() {
               <div className="bg-white rounded-xl shadow-md overflow-hidden mb-8">
                 <div className="p-6 border-b border-gray-200">
                   <h2 className="text-xl font-bold">Employee Payroll Hours</h2>
-                  <p className="text-sm text-gray-500 mt-1">Adjust payable hours for each employee (0 to total hours).</p>
+                  <p className="text-sm text-gray-500 mt-1">Select employees and adjust payable hours (0 to total hours).</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Select</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Employee</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Employee ID</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Hourly Rate</th>
@@ -402,6 +420,13 @@ export default function AdminPayments() {
                     <tbody className="divide-y divide-gray-200">
                       {payrollRows.map((row) => (
                         <tr key={row.employeeId} className="hover:bg-gray-50 transition">
+                          <td className="px-4 py-3 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={selectedPayrollEmployeeIds.includes(row.employeeId)}
+                              onChange={() => togglePayrollEmployee(row.employeeId)}
+                            />
+                          </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.employeeName}</td>
                           <td className="px-4 py-3 text-sm text-gray-700">{row.employeeAssignedId || '—'}</td>
                           <td className="px-4 py-3 text-sm text-gray-700">${round2(row.hourlyRate).toFixed(2)}</td>

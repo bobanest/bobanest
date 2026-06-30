@@ -1,15 +1,9 @@
 import dbConnect from '@/lib/dbConnect';
 import Employee from '@/lib/models/Employee';
 import Attendance from '@/lib/models/Attendance';
-import { Resend } from 'resend';
-
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+import { sendOwnerEmail } from '@/lib/ownerEmail';
 
 async function sendAttendanceEmail(employee, type, ip, userAgent) {
-  if (!resend) {
-    throw new Error('RESEND_API_KEY is not configured');
-  }
-
   const subject = type === 'login' ? `Employee Login: ${employee.name}` : `Employee Logout: ${employee.name}`;
   const html = `
     <p><strong>${employee.name}</strong> (${employee.email}) ${type === 'login' ? 'logged in' : 'logged out'}.</p>
@@ -17,13 +11,8 @@ async function sendAttendanceEmail(employee, type, ip, userAgent) {
     <p><strong>IP:</strong> ${ip}</p>
     <p><strong>User Agent:</strong> ${userAgent}</p>
   `;
-
-  await resend.emails.send({
-    from: 'Bobanest <orders@bobanest.com>',
-    to: ['bobanest.us@gmail.com'],
-    subject,
-    html,
-  });
+  const result = await sendOwnerEmail({ subject, html });
+  return result.sent;
 }
 
 export default async function handler(req, res) {
@@ -63,18 +52,14 @@ export default async function handler(req, res) {
     const attendance = new Attendance({ employee: employee._id, type, ip, userAgent });
     await attendance.save();
 
-    if (!resend) {
-      return res.status(500).json({ success: false, error: 'Email service not configured' });
-    }
-
+    let emailSent = false;
     try {
-      await sendAttendanceEmail(employee, type, ip, userAgent);
+      emailSent = await sendAttendanceEmail(employee, type, ip, userAgent);
     } catch (err) {
       console.error('Email send failed:', err);
-      return res.status(500).json({ success: false, error: 'Failed to send email' });
     }
 
-    return res.json({ success: true, type, attendanceId: attendance._id });
+    return res.json({ success: true, type, attendanceId: attendance._id, emailSent });
   }
 
   res.status(405).end();

@@ -1,9 +1,7 @@
 import dbConnect from '@/lib/dbConnect';
 import Employee from '@/lib/models/Employee';
 import Attendance from '@/lib/models/Attendance';
-import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { sendOwnerEmail } from '@/lib/ownerEmail';
 
 export default async function handler(req, res) {
   await dbConnect();
@@ -42,12 +40,7 @@ export default async function handler(req, res) {
     `;
 
     try {
-      await resend.emails.send({
-        from: 'Bobanest <orders@bobanest.com>',
-        to: ['bobanest.us@gmail.com'],
-        subject,
-        html,
-      });
+      await sendOwnerEmail({ subject, html });
     } catch (err) {
       console.error('Email send failed:', err);
     }

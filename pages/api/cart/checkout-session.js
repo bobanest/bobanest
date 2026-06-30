@@ -6,6 +6,7 @@ import Customer from '@/lib/models/Customer';
 import PromoCode from '@/lib/models/PromoCode';
 import StoreHours from '@/lib/models/StoreHours';
 import { getStoreStatusAt, isDateTimeOpen } from '@/lib/storeHoursHelper';
+import { sendOwnerEmail } from '@/lib/ownerEmail';
 import * as yup from 'yup';
 import { POINTS_PER_DOLLAR } from '../loyalty';
 
@@ -26,12 +27,8 @@ export default async function handler(req, res) {
         modifiers: yup.array().optional(),
       })
     ).min(1).required(),
-    orderType: yup.string().oneOf(['pickup', 'delivery']).required(),
-    deliveryAddress: yup.string().when('orderType', {
-      is: 'delivery',
-      then: s => s.required('Delivery address required for delivery'),
-      otherwise: s => s.optional(),
-    }),
+    orderType: yup.string().oneOf(['pickup']).optional(),
+    deliveryAddress: yup.string().optional().nullable(),
     appliedPromotions: yup.array().of(
       yup.object({
         promotionId: yup.string().optional(),
@@ -51,7 +48,9 @@ export default async function handler(req, res) {
 
   try {
     await schema.validate(req.body, { abortEarly: false });
-    const { items, orderType, deliveryAddress, appliedPromotions, customerEmail, customerPhone, scheduledTime, loyaltyDiscount = 0, loyaltyPointsUsed = 0, couponCode, referralCode } = req.body;
+    const { items, appliedPromotions, customerEmail, customerPhone, scheduledTime, loyaltyDiscount = 0, loyaltyPointsUsed = 0, couponCode, referralCode } = req.body;
+    const safeAppliedPromotions = Array.isArray(appliedPromotions) ? appliedPromotions : [];
+    const normalizedPromotions = safeAppliedPromotions.filter((promo) => promo?.type !== 'free_delivery');
 
     // ── Store hours validation ─────────────────────────────────────────────
     const storeHoursDoc = await StoreHours.findOne({}).lean();
@@ -80,10 +79,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // Calculate provisional total from items (excluding delivery fee? Include delivery fee in Stripe line items)
+    // Delivery is disabled at checkout, so all new orders are pickup-only.
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const deliveryFeeAmount = (orderType === 'delivery' && !appliedPromotions.some(p => p.type === 'free_delivery')) ? 3 : 0;
-    const discountAmount = appliedPromotions.reduce((sum, p) => sum + p.discountAmount, 0);
+    const deliveryFeeAmount = 0;
+    const discountAmount = normalizedPromotions.reduce((sum, p) => sum + (p.discountAmount || 0), 0);
     const provisionalTotal = Math.max(0, subtotal + deliveryFeeAmount - discountAmount - loyaltyDiscount - couponDiscount);
 
     // Generate a referral code for new customers
@@ -103,16 +102,29 @@ export default async function handler(req, res) {
       })),
       totalAmount: provisionalTotal, // store provisional total
       status: 'pending',
-      orderType: orderType || 'pickup',
-      deliveryAddress: deliveryAddress || '',
+      orderType: 'pickup',
+      deliveryAddress: '',
       scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
       trackingNumber,
       paymentStatus: 'pending',
-      appliedPromotions: appliedPromotions,
+      appliedPromotions: normalizedPromotions,
       couponCode: validatedCouponCode,
       couponDiscount,
       referralCode: referralCode ? referralCode.toUpperCase().trim() : null,
     });
+
+    const orderPlacedHtml = `
+      <h3>New Order Placed (Pending Payment)</h3>
+      <p><strong>Tracking #:</strong> ${trackingNumber}</p>
+      <p><strong>Type:</strong> PICKUP</p>
+      <p><strong>Email:</strong> ${customerEmail || 'N/A'}</p>
+      <p><strong>Phone:</strong> ${customerPhone || 'N/A'}</p>
+      <p><strong>Total:</strong> $${provisionalTotal.toFixed(2)}</p>
+    `;
+    sendOwnerEmail({
+      subject: `Order Placed: #${trackingNumber}`,
+      html: orderPlacedHtml,
+    }).catch((err) => console.error('Order placed email failed:', err.message));
 
     // Upsert customer with a referral code if they don't have one yet
     if (customerEmail) {
@@ -189,7 +201,7 @@ export default async function handler(req, res) {
       cancel_url: `${req.headers.origin}/cart`,
       metadata: {
         orderId: order._id.toString(),
-        appliedPromotions: JSON.stringify(appliedPromotions),
+        appliedPromotions: JSON.stringify(normalizedPromotions),
         customerEmail: customerEmail || '',
         customerPhone: customerPhone || '',
         loyaltyDiscount: loyaltyDiscount.toString(),

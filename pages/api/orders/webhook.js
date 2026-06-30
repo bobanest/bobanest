@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import dbConnect from '@/lib/dbConnect';
 import Order from '@/lib/models/Order';
 import FacebookTracking from '@/lib/models/FacebookTracking';
+import { sendOwnerEmail } from '@/lib/ownerEmail';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -27,7 +28,7 @@ async function sendOwnerSMS(message) {
   }
 }
 
-async function sendFacebookPurchaseEvent(order) {
+async function sendFacebookPurchaseEvent(order, req) {
   try {
     const fbSettings = await FacebookTracking.findOne();
     if (!fbSettings || !fbSettings.enabled || !fbSettings.pixelId || !fbSettings.accessToken) {
@@ -131,12 +132,31 @@ export default async function handler(req, res) {
         console.log(`Order ${order.trackingNumber} updated after payment.`);
 
         // Send Facebook Purchase event
-        await sendFacebookPurchaseEvent(order);
+        await sendFacebookPurchaseEvent(order, req);
 
         // SMS owner
         const itemSummary = (order.items || []).map(i => `${i.quantity}x ${i.name}`).join(', ');
         const smsBody = `🧋 New Order #${order.trackingNumber}!\n${order.customerName} · ${order.customerPhone || 'no phone'}\n${order.orderType.toUpperCase()}\n${itemSummary}\nTotal: $${order.totalAmount.toFixed(2)}`;
         await sendOwnerSMS(smsBody);
+
+        // Email owner
+        const itemsHtml = (order.items || [])
+          .map((item) => `<li>${item.quantity || 1}x ${item.name || 'Item'} - $${Number(item.price || 0).toFixed(2)}</li>`)
+          .join('');
+        await sendOwnerEmail({
+          subject: `Payment Confirmed: #${order.trackingNumber}`,
+          html: `
+            <h3>Order Payment Confirmed</h3>
+            <p><strong>Tracking #:</strong> ${order.trackingNumber}</p>
+            <p><strong>Customer:</strong> ${order.customerName || 'N/A'}</p>
+            <p><strong>Email:</strong> ${order.customerEmail || 'N/A'}</p>
+            <p><strong>Phone:</strong> ${order.customerPhone || 'N/A'}</p>
+            <p><strong>Type:</strong> ${String(order.orderType || 'pickup').toUpperCase()}</p>
+            <p><strong>Total:</strong> $${Number(order.totalAmount || 0).toFixed(2)}</p>
+            <p><strong>Items:</strong></p>
+            <ul>${itemsHtml}</ul>
+          `,
+        });
       }
     }
   }
