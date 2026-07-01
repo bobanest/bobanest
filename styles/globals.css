@@ -38,17 +38,17 @@ body {
   object-fit: contain;
 }
 
-@keyframes live-score-ltr {
+@keyframes live-score-rtl {
   0% {
-    transform: translateX(-100%);
+    transform: translateX(100%);
   }
   100% {
-    transform: translateX(100%);
+    transform: translateX(-100%);
   }
 }
 
 .live-score-track {
   display: inline-block;
   min-width: 100%;
-  animation: live-score-ltr 18s linear infinite;
+  animation: live-score-rtl 30s linear infinite;
 }
