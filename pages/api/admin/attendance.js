@@ -1,6 +1,32 @@
 import dbConnect from '@/lib/dbConnect';
 import Attendance from '@/lib/models/Attendance';
 import Employee from '@/lib/models/Employee';
+import Expense from '@/lib/models/Expense';
+
+function round2(n) {
+  return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function calculateHoursFromAttendances(attendances, periodEnd = new Date()) {
+  let totalMs = 0;
+  let lastLogin = null;
+
+  for (const row of attendances) {
+    if (row.type === 'login') {
+      lastLogin = new Date(row.timestamp);
+    } else if (row.type === 'logout' && lastLogin) {
+      const logout = new Date(row.timestamp);
+      totalMs += Math.max(0, logout - lastLogin);
+      lastLogin = null;
+    }
+  }
+
+  if (lastLogin) {
+    totalMs += Math.max(0, new Date(periodEnd) - lastLogin);
+  }
+
+  return totalMs / (1000 * 60 * 60);
+}
 
 export default async function handler(req, res) {
   await dbConnect();
@@ -60,12 +86,61 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'ids array is required' });
     }
 
+    const targetIds = ids.map((id) => String(id));
+    const unpaidLogs = await Attendance.find({
+      _id: { $in: targetIds },
+      isPaid: { $ne: true },
+    })
+      .populate('employee')
+      .sort({ timestamp: 1 })
+      .lean();
+
+    if (Boolean(isPaid) && unpaidLogs.length > 0) {
+      const grouped = unpaidLogs.reduce((acc, log) => {
+        const employeeId = String(log?.employee?._id || '');
+        if (!employeeId) return acc;
+        if (!acc[employeeId]) {
+          acc[employeeId] = { employee: log.employee, logs: [] };
+        }
+        acc[employeeId].logs.push(log);
+        return acc;
+      }, {});
+
+      const expensesToCreate = Object.values(grouped)
+        .map(({ employee, logs }) => {
+          const paidHours = round2(calculateHoursFromAttendances(logs));
+          const hourlyRate = Number(employee?.hourlyRate || 0);
+          const amount = round2(paidHours * hourlyRate);
+
+          if (amount <= 0) return null;
+          const employeeName = employee?.name || 'Employee';
+          const from = logs[0]?.timestamp ? new Date(logs[0].timestamp).toISOString().slice(0, 10) : '';
+          const to = logs[logs.length - 1]?.timestamp ? new Date(logs[logs.length - 1].timestamp).toISOString().slice(0, 10) : '';
+
+          return {
+            description: `Payroll - ${employeeName}`,
+            amount,
+            category: 'labor',
+            date: new Date(),
+            notes: `Auto from payroll mark paid | Employee: ${employeeName} | Hours: ${paidHours.toFixed(2)} | Rate: $${round2(hourlyRate).toFixed(2)} | Records: ${logs.length} | Range: ${from} to ${to}`,
+          };
+        })
+        .filter(Boolean);
+
+      if (expensesToCreate.length) {
+        await Expense.insertMany(expensesToCreate);
+      }
+    }
+
     const update = isPaid
       ? { isPaid: true, paidAt: new Date() }
       : { isPaid: false, paidAt: null };
 
-    await Attendance.updateMany({ _id: { $in: ids } }, { $set: update });
-    return res.json({ success: true, count: ids.length, isPaid: Boolean(isPaid) });
+    const updateResult = await Attendance.updateMany(
+      { _id: { $in: targetIds }, isPaid: { $ne: Boolean(isPaid) } },
+      { $set: update }
+    );
+    return res.json({ success: true, count: Number(updateResult.modifiedCount || 0), isPaid: Boolean(isPaid) });
   }
 
   res.status(405).end();
