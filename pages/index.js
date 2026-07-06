@@ -5,6 +5,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useCart } from '@/components/CartContext';
 import ProductModal from '@/components/ProductModal';
 
+const DESCRIPTION_VISIBLE_MS = 4000;
+
 function NewsletterSection() {
 	const [email, setEmail] = useState('');
 	const [name, setName] = useState('');
@@ -83,6 +85,19 @@ export default function Home() {
 	const categoryRefs = useRef({});
 	const productsSectionRef = useRef(null);
 	const [stickyMenuVisible, setStickyMenuVisible] = useState(false);
+	const [activeDescriptionProductId, setActiveDescriptionProductId] = useState(null);
+	const descriptionTimeoutRef = useRef(null);
+
+	const showDescription = (productId) => {
+		setActiveDescriptionProductId(productId);
+		if (descriptionTimeoutRef.current) {
+			clearTimeout(descriptionTimeoutRef.current);
+		}
+		descriptionTimeoutRef.current = setTimeout(() => {
+			setActiveDescriptionProductId(null);
+			descriptionTimeoutRef.current = null;
+		}, DESCRIPTION_VISIBLE_MS);
+	};
 
 	// Fetch all data in parallel (no race condition)
 	useEffect(() => {
@@ -160,6 +175,12 @@ export default function Home() {
 		window.addEventListener('scroll', handleScroll);
 		return () => window.removeEventListener('scroll', handleScroll);
 	}, [loading, categories]);
+
+	useEffect(() => () => {
+		if (descriptionTimeoutRef.current) {
+			clearTimeout(descriptionTimeoutRef.current);
+		}
+	}, []);
 
 	const scrollToCategory = (category) => {
 		const section = categoryRefs.current[category];
@@ -240,9 +261,18 @@ export default function Home() {
 												</div>
 											)}
 											<div className="cup-container h-32 flex items-center justify-center">
-												<img src={product.imageUrl} alt={product.name} className="product-cup-image max-h-full max-w-full object-contain" />
+												<img
+													src={product.imageUrl}
+													alt={product.name}
+													className="product-cup-image max-h-full max-w-full object-contain cursor-pointer"
+													onClick={() => showDescription(product._id)}
+													onTouchStart={() => showDescription(product._id)}
+												/>
 											</div>
 											<h3 className="font-bold mt-2">{product.name}</h3>
+											{activeDescriptionProductId === product._id && (
+												<p className="text-xs text-gray-600 mt-1 min-h-[2.5rem]">{product.description}</p>
+											)}
 											<p className="text-primary font-bold mt-1">${product.price}</p>
 											<button
 												onClick={() => setModalProduct(product)}
@@ -298,9 +328,18 @@ export default function Home() {
 										</div>
 									)}
 									<div className="cup-container h-32 flex items-center justify-center">
-											<img src={product.imageUrl} alt={product.name} className="product-cup-image max-h-full max-w-full object-contain" />
+											<img
+												src={product.imageUrl}
+												alt={product.name}
+												className="product-cup-image max-h-full max-w-full object-contain cursor-pointer"
+												onClick={() => showDescription(product._id)}
+												onTouchStart={() => showDescription(product._id)}
+											/>
 										</div>
 										<h3 className="font-bold mt-2">{product.name}</h3>
+										{activeDescriptionProductId === product._id && (
+											<p className="text-xs text-gray-600 mt-1 min-h-[2.5rem]">{product.description}</p>
+										)}
 										<p className="text-primary font-bold mt-1">${product.price}</p>
 										<button
 											onClick={() => setModalProduct(product)}

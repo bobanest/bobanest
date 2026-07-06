@@ -3,6 +3,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useCart } from '@/components/CartContext';
 import ProductModal from '@/components/ProductModal';
 
+const DESCRIPTION_VISIBLE_MS = 4000;
+
 // Helper: check if product should show NEW badge
 function isProductNew(product) {
   return !!product.isNewItem;
@@ -27,8 +29,27 @@ export default function ProductsPage({ products, promotions }) {
   const categories = [...new Set(products.map(p => p.category))];
   const [activeCategory, setActiveCategory] = useState(categories[0] || '');
   const [modalProduct, setModalProduct] = useState(null);
+  const [activeDescriptionProductId, setActiveDescriptionProductId] = useState(null);
   const { addToCart } = useCart();
   const categoryRefs = useRef({});
+  const descriptionTimeoutRef = useRef(null);
+
+  const showDescription = (productId) => {
+    setActiveDescriptionProductId(productId);
+    if (descriptionTimeoutRef.current) {
+      clearTimeout(descriptionTimeoutRef.current);
+    }
+    descriptionTimeoutRef.current = setTimeout(() => {
+      setActiveDescriptionProductId(null);
+      descriptionTimeoutRef.current = null;
+    }, DESCRIPTION_VISIBLE_MS);
+  };
+
+  useEffect(() => () => {
+    if (descriptionTimeoutRef.current) {
+      clearTimeout(descriptionTimeoutRef.current);
+    }
+  }, []);
 
   // Scroll spy for sticky categories
   useEffect(() => {
@@ -107,9 +128,18 @@ export default function ProductsPage({ products, promotions }) {
                       </div>
                     )}
                     <div className="cup-container h-32 flex items-center justify-center">
-                      <img src={product.imageUrl} alt={product.name} className="product-cup-image max-h-full max-w-full object-contain" />
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        className="product-cup-image max-h-full max-w-full object-contain cursor-pointer"
+                        onClick={() => showDescription(product._id)}
+                        onTouchStart={() => showDescription(product._id)}
+                      />
                     </div>
                     <h3 className="font-bold mt-2">{product.name}</h3>
+                    {activeDescriptionProductId === product._id && (
+                      <p className="text-xs text-gray-600 mt-1 min-h-[2.5rem]">{product.description}</p>
+                    )}
                     <p className="text-primary font-bold mt-1">${product.price}</p>
                     <button
                       onClick={() => setModalProduct(product)}
@@ -147,4 +177,3 @@ export async function getServerSideProps() {
   const promotions = await promosRes.json();
   return { props: { products, promotions } };
 }
-

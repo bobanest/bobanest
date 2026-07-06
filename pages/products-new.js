@@ -3,12 +3,27 @@ import Layout from '@/components/Layout';
 import { useEffect, useState, useRef } from 'react';
 import { useCart } from '@/components/CartContext';
 
+const DESCRIPTION_VISIBLE_MS = 4000;
+
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeCategory, setActiveCategory] = useState('');
+  const [activeDescriptionProductId, setActiveDescriptionProductId] = useState(null);
   const { addToCart } = useCart();
   const categoryRefs = useRef({});
+  const descriptionTimeoutRef = useRef(null);
+
+  const showDescription = (productId) => {
+    setActiveDescriptionProductId(productId);
+    if (descriptionTimeoutRef.current) {
+      clearTimeout(descriptionTimeoutRef.current);
+    }
+    descriptionTimeoutRef.current = setTimeout(() => {
+      setActiveDescriptionProductId(null);
+      descriptionTimeoutRef.current = null;
+    }, DESCRIPTION_VISIBLE_MS);
+  };
 
   useEffect(() => {
     fetch('/api/admin/products')
@@ -37,6 +52,12 @@ export default function ProductsPage() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, [categories]);
+
+  useEffect(() => () => {
+    if (descriptionTimeoutRef.current) {
+      clearTimeout(descriptionTimeoutRef.current);
+    }
+  }, []);
 
   const scrollToCategory = (category) => {
     const section = categoryRefs.current[category];
@@ -73,8 +94,17 @@ export default function ProductsPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {items.map(product => (
                 <div key={product._id} className="bg-white rounded-lg shadow p-4 text-center">
-                  <img src={product.cupImageUrl || product.imageUrl} alt={product.name} className="w-full h-32 object-contain" />
+                  <img
+                    src={product.cupImageUrl || product.imageUrl}
+                    alt={product.name}
+                    className="w-full h-32 object-contain cursor-pointer"
+                    onClick={() => showDescription(product._id)}
+                    onTouchStart={() => showDescription(product._id)}
+                  />
                   <h3 className="font-bold mt-2">{product.name}</h3>
+                  {activeDescriptionProductId === product._id && (
+                    <p className="text-xs text-gray-600 mt-1 min-h-[2.5rem]">{product.description}</p>
+                  )}
                   <p className="text-primary font-bold mt-1">${product.price}</p>
                   <button onClick={() => addToCart({ ...product, id: product._id })} className="mt-3 bg-secondary text-white px-4 py-1 rounded-full text-sm hover:bg-primary">Add</button>
                 </div>
