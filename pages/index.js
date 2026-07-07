@@ -231,6 +231,27 @@ export default function Home() {
 				</div>
 			</div>
 
+			{/* Build Your Own Feature */}
+			<section className="py-10 bg-gradient-to-r from-amber-50 via-orange-50 to-rose-50">
+				<div className="max-w-7xl mx-auto px-4">
+					<div className="bg-white rounded-2xl shadow-lg border border-orange-100 p-6 md:p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+						<div>
+							<p className="text-xs uppercase tracking-widest text-secondary font-bold">New Custom Builder</p>
+							<h2 className="text-3xl font-extrabold text-dark mt-1">Build Your Own Fruit Tea</h2>
+							<p className="text-gray-600 mt-2 max-w-2xl">
+								Pick your tea base, choose up to 3 syrup flavors, adjust sugar, and add multiple popping boba flavors.
+							</p>
+							<p className="text-sm text-gray-500 mt-1">Popping boba only for custom fruit tea. No tapioca pearl.</p>
+						</div>
+						<div className="flex-shrink-0">
+							<Link href="/build-your-own-fruit-tea" className="btn-primary inline-block">
+								Start Building
+							</Link>
+						</div>
+					</div>
+				</div>
+			</section>
+
 			{/* Promotion Sections (dynamic backgrounds) */}
 			{Object.entries(promotionGroups).map(([title, products], idx) => {
 				const bgColors = [

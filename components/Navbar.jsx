@@ -12,6 +12,7 @@ export default function Navbar() {
   const navLinks = [
     { href: '/', label: 'Home' },
     { href: '/products', label: 'Menu' },
+    { href: '/build-your-own-fruit-tea', label: 'Build Tea' },
     { href: '/catering', label: 'Catering' },
     { href: '/contact', label: 'Contact' },
     { href: '/track-order', label: 'Track Order' },
