@@ -1,7 +1,7 @@
 
 import Layout from '@/components/Layout';
 import Link from 'next/link';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCart } from '@/components/CartContext';
 import ProductModal from '@/components/ProductModal';
 
@@ -77,14 +77,11 @@ export default function Home() {
 	});
 	const [allProducts, setAllProducts] = useState([]);
 	const [categories, setCategories] = useState([]);
-	const [activeCategory, setActiveCategory] = useState('');
 	const [promotions, setPromotions] = useState([]);
 	const [modalProduct, setModalProduct] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const { addToCart } = useCart();
-	const categoryRefs = useRef({});
-	const productsSectionRef = useRef(null);
-	const [stickyMenuVisible, setStickyMenuVisible] = useState(false);
+	const [showQuickActionBar, setShowQuickActionBar] = useState(false);
 	const [activeDescriptionProductId, setActiveDescriptionProductId] = useState(null);
 	const descriptionTimeoutRef = useRef(null);
 
@@ -111,7 +108,6 @@ export default function Home() {
 			setPromotions(promos);
 			const uniqueCategories = [...new Set(products.map(p => p.category))];
 			setCategories(uniqueCategories);
-			if (uniqueCategories.length) setActiveCategory(uniqueCategories[0]);
 			setLoading(false);
 		});
 	}, []);
@@ -154,27 +150,15 @@ export default function Home() {
 		promotionGroups[title] = promotionGroups[title].filter((v, i, a) => a.findIndex(t => t._id === v._id) === i);
 	});
 
-	// Scroll spy for sticky categories
+	// Show a fixed quick action bar after the user scrolls past the hero area.
 	useEffect(() => {
-		if (loading) return;
 		const handleScroll = () => {
-			if (productsSectionRef.current) {
-				const productsTop = productsSectionRef.current.offsetTop;
-				const scrollY = window.scrollY;
-				setStickyMenuVisible(scrollY >= productsTop - 80);
-			}
-			for (let i = categories.length - 1; i >= 0; i--) {
-				const cat = categories[i];
-				const section = categoryRefs.current[cat];
-				if (section && window.scrollY >= section.offsetTop - 100) {
-					setActiveCategory(cat);
-					break;
-				}
-			}
+			setShowQuickActionBar(window.scrollY > 240);
 		};
 		window.addEventListener('scroll', handleScroll);
+		handleScroll();
 		return () => window.removeEventListener('scroll', handleScroll);
-	}, [loading, categories]);
+	}, []);
 
 	useEffect(() => () => {
 		if (descriptionTimeoutRef.current) {
@@ -182,17 +166,28 @@ export default function Home() {
 		}
 	}, []);
 
-	const scrollToCategory = (category) => {
-		const section = categoryRefs.current[category];
-		if (section) {
-			window.scrollTo({ top: section.offsetTop - 80, behavior: 'smooth' });
-		}
-	};
-
 	const groupedProducts = categories.map(cat => ({
 		category: cat,
 		items: allProducts.filter(p => p.category === cat),
 	}));
+
+	const bestSellers = useMemo(() => {
+		const categoryPriority = {
+			'Milk Tea': 1,
+			'Fruit Tea': 2,
+			'Specialty': 3,
+			'Smoothie': 4,
+		};
+		return [...allProducts]
+			.sort((a, b) => {
+				const aScore = categoryPriority[a.category] || 99;
+				const bScore = categoryPriority[b.category] || 99;
+				if (aScore !== bScore) return aScore - bScore;
+				if (!!a.isNewItem !== !!b.isNewItem) return b.isNewItem ? 1 : -1;
+				return (b.price || 0) - (a.price || 0);
+			})
+			.slice(0, 8);
+	}, [allProducts]);
 
 	const handleAddToCart = (productWithModifiers) => {
 		addToCart({
@@ -218,6 +213,16 @@ export default function Home() {
 
 	return (
 		<Layout>
+			{showQuickActionBar && (
+				<div className="fixed top-16 left-0 right-0 z-40 bg-white/95 backdrop-blur border-b border-orange-100 shadow-sm">
+					<div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-center gap-2 md:gap-3">
+						<Link href="/products" className="bg-primary text-white px-4 py-2 rounded-full text-sm font-semibold">Order Now</Link>
+						<Link href="/build-your-own-fruit-tea" className="bg-secondary text-white px-4 py-2 rounded-full text-sm font-semibold">Build Fruit Tea</Link>
+						<Link href="/track-order" className="bg-dark text-white px-4 py-2 rounded-full text-sm font-semibold">Track Order</Link>
+					</div>
+				</div>
+			)}
+
 			{/* Hero Section */}
 			<div className="relative bg-cover bg-center bg-no-repeat overflow-hidden" style={{ backgroundImage: `url(${heroData.imageUrl})` }}>
 				<div className="absolute inset-0 bg-black/40"></div>
@@ -226,10 +231,85 @@ export default function Home() {
 					<p className="text-xl mb-8 max-w-2xl mx-auto">{heroData.subtitle}</p>
 					<div className="flex flex-wrap gap-4 justify-center">
 						<Link href="/products" className="btn-primary bg-white text-dark hover:bg-gray-100">Order Now</Link>
-						<Link href="/catering" className="btn-outline border-white text-white hover:bg-white hover:text-dark">Catering</Link>
+						<Link href="/build-your-own-fruit-tea" className="btn-outline border-white text-white hover:bg-white hover:text-dark">Build Fruit Tea</Link>
 					</div>
 				</div>
 			</div>
+
+			{/* Quick Entry Cards */}
+			<section className="py-8 bg-white">
+				<div className="max-w-7xl mx-auto px-4">
+					<div className="grid md:grid-cols-3 gap-4">
+						<Link href="/products" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-amber-50 to-orange-100 p-6 hover:shadow-md transition">
+							<p className="text-xs uppercase tracking-wider font-semibold text-secondary">Fast Pick</p>
+							<h3 className="text-2xl font-bold text-dark mt-1">Popular Drinks</h3>
+							<p className="text-sm text-gray-600 mt-2">Order customer favorites in seconds.</p>
+						</Link>
+						<Link href="/build-your-own-fruit-tea" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-rose-50 to-orange-100 p-6 hover:shadow-md transition">
+							<p className="text-xs uppercase tracking-wider font-semibold text-secondary">Customize</p>
+							<h3 className="text-2xl font-bold text-dark mt-1">Build Fruit Tea</h3>
+							<p className="text-sm text-gray-600 mt-2">Choose base, syrups, sugar, and popping boba.</p>
+						</Link>
+						<Link href="/loyalty" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 to-yellow-100 p-6 hover:shadow-md transition">
+							<p className="text-xs uppercase tracking-wider font-semibold text-secondary">Rewards</p>
+							<h3 className="text-2xl font-bold text-dark mt-1">Earn Points</h3>
+							<p className="text-sm text-gray-600 mt-2">Get points for every order and redeem at checkout.</p>
+						</Link>
+					</div>
+				</div>
+			</section>
+
+			{/* Best Sellers */}
+			<section className="py-12 bg-gradient-to-r from-orange-50 to-amber-50">
+				<div className="max-w-7xl mx-auto px-4">
+					<div className="flex items-center justify-between gap-4 mb-6">
+						<div>
+							<p className="text-xs uppercase tracking-wider text-secondary font-semibold">Top Picks</p>
+							<h2 className="text-3xl font-bold">Best Sellers</h2>
+						</div>
+						<Link href="/products" className="text-sm font-semibold text-primary hover:text-secondary">View Full Menu</Link>
+					</div>
+					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-6">
+						{bestSellers.map(product => {
+							const promo = getProductPromotion(product);
+							return (
+								<div key={product._id} className="product-card bg-white rounded-lg shadow p-4 text-center hover:shadow-md transition relative">
+									{promo && (
+										<div className={`absolute top-2 left-2 ${promo.color} text-white text-xs font-bold px-2 py-1 rounded-full z-10`}>
+											{promo.text}
+										</div>
+									)}
+									{product.isNewItem && (
+										<div className="absolute top-2 right-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full z-10">
+											NEW
+										</div>
+									)}
+									<div className="cup-container h-32 flex items-center justify-center">
+										<img
+											src={product.imageUrl}
+											alt={product.name}
+											className="product-cup-image max-h-full max-w-full object-contain cursor-pointer"
+											onClick={() => showDescription(product._id)}
+											onTouchStart={() => showDescription(product._id)}
+										/>
+									</div>
+									<h3 className="font-bold mt-2">{product.name}</h3>
+									{activeDescriptionProductId === product._id && (
+										<p className="text-xs text-gray-600 mt-1 min-h-[2.5rem]">{product.description}</p>
+									)}
+									<p className="text-primary font-bold mt-1">${product.price}</p>
+									<button
+										onClick={() => setModalProduct(product)}
+										className="mt-3 bg-secondary text-white px-4 py-1 rounded-full text-sm hover:bg-primary transition"
+									>
+										Add to Cart
+									</button>
+								</div>
+							);
+						})}
+					</div>
+				</div>
+			</section>
 
 			{/* Build Your Own Feature */}
 			<section className="py-10 bg-gradient-to-r from-amber-50 via-orange-50 to-rose-50">
@@ -310,31 +390,21 @@ export default function Home() {
 				);
 			})}
 
-			{/* All Products Section with Sticky Categories */}
-			<div ref={productsSectionRef} className="max-w-7xl mx-auto px-4 py-8">
-				{stickyMenuVisible && categories.length > 0 && (
-					<div className="fixed top-16 left-0 right-0 bg-white shadow-md z-30 py-3 px-4 overflow-x-auto">
-						<div className="flex justify-center gap-4 min-w-max">
-							{categories.map(cat => (
-								<button
-									key={cat}
-									onClick={() => scrollToCategory(cat)}
-									className={`px-4 py-2 rounded-full transition ${
-										activeCategory === cat ? 'bg-primary text-white' : 'bg-gray-200 text-dark'
-									}`}
-								>
-									{cat}
-								</button>
-							))}
-						</div>
+			{/* Menu Highlights */}
+			<section className="max-w-7xl mx-auto px-4 py-10">
+				<div className="flex items-center justify-between gap-4 mb-6">
+					<div>
+						<p className="text-xs uppercase tracking-wider text-secondary font-semibold">Browse</p>
+						<h2 className="text-3xl font-bold">Menu Highlights</h2>
 					</div>
-				)}
+					<Link href="/products" className="btn-outline">View Full Menu</Link>
+				</div>
 
 				{groupedProducts.map(({ category, items }) => (
-					<div key={category} ref={el => (categoryRefs.current[category] = el)} className="mb-12">
+					<div key={category} className="mb-12">
 						<h2 className="text-2xl font-bold mb-6">{category}</h2>
 						<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-							{items.map(product => {
+							{items.slice(0, 3).map(product => {
 								const promo = getProductPromotion(product);
 								return (
 									<div key={product._id} className="product-card bg-white rounded-lg shadow p-4 text-center hover:shadow-md transition relative">
@@ -375,7 +445,7 @@ export default function Home() {
 					</div>
 				))}
 				{allProducts.length === 0 && <p className="text-center text-gray-500 py-12">No products available yet.</p>}
-			</div>
+			</section>
 
 			{/* Loyalty Rewards Section */}
 			<section className="py-20 bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50">
@@ -487,6 +557,9 @@ export default function Home() {
 						<div className="p-6 bg-gray-50 rounded-lg shadow">⭐️⭐️⭐️⭐️⭐️<br/>"Best bubble tea in town!"<br/>- Sarah</div>
 						<div className="p-6 bg-gray-50 rounded-lg shadow">⭐️⭐️⭐️⭐️⭐️<br/>"Fast delivery, great flavors."<br/>- Mike</div>
 						<div className="p-6 bg-gray-50 rounded-lg shadow">⭐️⭐️⭐️⭐️⭐️<br/>"We order every week."<br/>- Jessica</div>
+					</div>
+					<div className="mt-8">
+						<Link href="/products" className="btn-primary">Order Now</Link>
 					</div>
 				</div>
 			</section>
