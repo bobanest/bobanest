@@ -1,7 +1,11 @@
 import '@/styles/globals.css';
 import { CartProvider } from '@/components/CartContext';
 import { SessionProvider } from 'next-auth/react';
+import { useRouter } from 'next/router';
+import Script from 'next/script';
 import { useEffect } from 'react';
+
+const GA_MEASUREMENT_ID = 'G-3TE06C5MK5';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -30,6 +34,8 @@ async function subscribeToPush(registration) {
 }
 
 export default function App({ Component, pageProps: { session, ...pageProps } }) {
+  const router = useRouter();
+
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
     navigator.serviceWorker.register('/sw.js').then(async (registration) => {
@@ -48,8 +54,33 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
     }).catch(console.error);
   }, []);
 
+  useEffect(() => {
+    const handleRouteChange = (url) => {
+      if (!window.gtag) return;
+      window.gtag('config', GA_MEASUREMENT_ID, { page_path: url });
+    };
+
+    router.events.on('routeChangeComplete', handleRouteChange);
+    return () => {
+      router.events.off('routeChangeComplete', handleRouteChange);
+    };
+  }, [router.events]);
+
   return (
     <SessionProvider session={session}>
+      <Script
+        src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+        strategy="afterInteractive"
+      />
+      <Script id="google-analytics" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          window.gtag = gtag;
+          gtag('js', new Date());
+          gtag('config', '${GA_MEASUREMENT_ID}');
+        `}
+      </Script>
       <CartProvider>
         <Component {...pageProps} />
       </CartProvider>
