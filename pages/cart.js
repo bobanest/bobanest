@@ -58,6 +58,7 @@ function fmtTime12(t) {
 export default function CartPage() {
   const { cartItems, removeFromCart, updateQuantity, totalPrice, clearCart, addToCart } = useCart();
   const DELIVERY_FEE_AMOUNT = 4.99;
+  const DELIVERY_MIN_ORDER_SUBTOTAL = 20;
   const [checkingOut, setCheckingOut] = useState(false);
   const [error, setError] = useState('');
   const [promotions, setPromotions] = useState([]);
@@ -103,9 +104,18 @@ export default function CartPage() {
 
   const items = cartItems ?? [];
   const tax = totalPrice * 0.07;
-  const deliveryFee = orderType === 'delivery' ? DELIVERY_FEE_AMOUNT : 0;
   const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
+  const discountedSubtotal = Math.max(0, totalPrice - discount - loyaltyDiscount - couponDiscount);
+  const deliveryEligible = discountedSubtotal > DELIVERY_MIN_ORDER_SUBTOTAL;
+  const deliveryFee = orderType === 'delivery' ? DELIVERY_FEE_AMOUNT : 0;
   const finalTotal = Math.max(0, totalPrice + tax + deliveryFee - discount - loyaltyDiscount - couponDiscount);
+
+  useEffect(() => {
+    if (orderType === 'delivery' && !deliveryEligible) {
+      setOrderType('pickup');
+      setError(`Delivery is available only when order subtotal is more than $${DELIVERY_MIN_ORDER_SUBTOTAL.toFixed(2)}.`);
+    }
+  }, [orderType, deliveryEligible]);
 
   // Fetch active promotions
   useEffect(() => {
@@ -304,6 +314,10 @@ export default function CartPage() {
     if (items.length === 0) return;
     if (!customerPhone.trim()) {
       setError('Please enter your phone number so we can contact you about your order');
+      return;
+    }
+    if (orderType === 'delivery' && !deliveryEligible) {
+      setError(`Delivery is available only when order subtotal is more than $${DELIVERY_MIN_ORDER_SUBTOTAL.toFixed(2)}.`);
       return;
     }
     if (orderType === 'delivery' && !deliveryAddress.trim()) {
@@ -555,14 +569,27 @@ export default function CartPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setOrderType('delivery')}
+                  onClick={() => {
+                    if (!deliveryEligible) {
+                      setError(`Delivery is available only when order subtotal is more than $${DELIVERY_MIN_ORDER_SUBTOTAL.toFixed(2)}.`);
+                      return;
+                    }
+                    setError('');
+                    setOrderType('delivery');
+                  }}
+                  disabled={!deliveryEligible}
                   className={`border rounded-lg px-3 py-2 text-sm font-semibold transition ${
                     orderType === 'delivery' ? 'bg-primary text-white border-primary' : 'bg-white text-gray-700 border-gray-300'
-                  }`}
+                  } disabled:opacity-50`}
                 >
                   Delivery (+${DELIVERY_FEE_AMOUNT.toFixed(2)})
                 </button>
               </div>
+              {!deliveryEligible && (
+                <p className="text-xs text-red-600 mt-2">
+                  Delivery unlocks when discounted subtotal is more than ${DELIVERY_MIN_ORDER_SUBTOTAL.toFixed(2)}.
+                </p>
+              )}
               {orderType === 'delivery' && (
                 <div className="mt-2">
                   <label className="block font-semibold text-sm mb-1">Delivery Address <span className="text-red-500">*</span></label>
@@ -711,6 +738,7 @@ export default function CartPage() {
               {discount > 0 && <div className="flex justify-between text-green-600"><span>Promo Discount</span><span>-${discount.toFixed(2)}</span></div>}
               {couponDiscount > 0 && <div className="flex justify-between text-green-600"><span>Coupon ({appliedCoupon.code})</span><span>-${couponDiscount.toFixed(2)}</span></div>}
               {loyaltyDiscount > 0 && <div className="flex justify-between text-purple-600"><span>Loyalty Reward</span><span>-${loyaltyDiscount.toFixed(2)}</span></div>}
+              <div className="flex justify-between text-gray-600"><span>Discounted Subtotal</span><span>${discountedSubtotal.toFixed(2)}</span></div>
               <div className="flex justify-between font-bold text-base pt-2 border-t"><span>Total</span><span>${finalTotal.toFixed(2)}</span></div>
             </div>
 
