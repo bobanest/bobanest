@@ -57,6 +57,7 @@ function fmtTime12(t) {
 
 export default function CartPage() {
   const { cartItems, removeFromCart, updateQuantity, totalPrice, clearCart, addToCart } = useCart();
+  const DELIVERY_FEE_AMOUNT = 4.99;
   const [checkingOut, setCheckingOut] = useState(false);
   const [error, setError] = useState('');
   const [promotions, setPromotions] = useState([]);
@@ -67,6 +68,8 @@ export default function CartPage() {
   const [customerEmail, setCustomerEmail] = useState('');
   const [emailSaved, setEmailSaved] = useState(false);
   const [customerPhone, setCustomerPhone] = useState('');
+  const [orderType, setOrderType] = useState('pickup');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduledTime, setScheduledTime] = useState(toDatetimeLocal(getMinScheduledTime()));
   const [loyaltyPoints, setLoyaltyPoints] = useState(null); // null = not loaded
@@ -100,7 +103,7 @@ export default function CartPage() {
 
   const items = cartItems ?? [];
   const tax = totalPrice * 0.07;
-  const deliveryFee = 0;
+  const deliveryFee = orderType === 'delivery' ? DELIVERY_FEE_AMOUNT : 0;
   const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
   const finalTotal = Math.max(0, totalPrice + tax + deliveryFee - discount - loyaltyDiscount - couponDiscount);
 
@@ -303,6 +306,10 @@ export default function CartPage() {
       setError('Please enter your phone number so we can contact you about your order');
       return;
     }
+    if (orderType === 'delivery' && !deliveryAddress.trim()) {
+      setError('Please enter your delivery address');
+      return;
+    }
 
     // Track Facebook InitiateCheckout event
     trackInitiateCheckout(items, finalTotal);
@@ -326,8 +333,8 @@ export default function CartPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: cartItemsForStripe,
-          orderType: 'pickup',
-          deliveryAddress: '',
+          orderType,
+          deliveryAddress: orderType === 'delivery' ? deliveryAddress.trim() : '',
           appliedPromotions,
           couponCode: appliedCoupon ? appliedCoupon.code : null,
           referralCode: referralValidated ? referralInput.trim().toUpperCase() : null,
@@ -536,7 +543,38 @@ export default function CartPage() {
             {/* Order Type */}
             <div>
               <p className="font-semibold mb-2">Order Type</p>
-              <p className="text-sm text-gray-700">Pickup only</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOrderType('pickup')}
+                  className={`border rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    orderType === 'pickup' ? 'bg-primary text-white border-primary' : 'bg-white text-gray-700 border-gray-300'
+                  }`}
+                >
+                  Pickup
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderType('delivery')}
+                  className={`border rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    orderType === 'delivery' ? 'bg-primary text-white border-primary' : 'bg-white text-gray-700 border-gray-300'
+                  }`}
+                >
+                  Delivery (+${DELIVERY_FEE_AMOUNT.toFixed(2)})
+                </button>
+              </div>
+              {orderType === 'delivery' && (
+                <div className="mt-2">
+                  <label className="block font-semibold text-sm mb-1">Delivery Address <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    placeholder="Street address, city, ZIP"
+                    value={deliveryAddress}
+                    onChange={e => setDeliveryAddress(e.target.value)}
+                    className="w-full border p-2 rounded text-sm"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Order Scheduling */}
@@ -669,6 +707,7 @@ export default function CartPage() {
             <div className="pt-2 border-t space-y-1 text-sm">
               <div className="flex justify-between"><span>Subtotal</span><span>${totalPrice.toFixed(2)}</span></div>
               <div className="flex justify-between"><span>Tax (7%)</span><span>${tax.toFixed(2)}</span></div>
+              {deliveryFee > 0 && <div className="flex justify-between"><span>Delivery Fee</span><span>${deliveryFee.toFixed(2)}</span></div>}
               {discount > 0 && <div className="flex justify-between text-green-600"><span>Promo Discount</span><span>-${discount.toFixed(2)}</span></div>}
               {couponDiscount > 0 && <div className="flex justify-between text-green-600"><span>Coupon ({appliedCoupon.code})</span><span>-${couponDiscount.toFixed(2)}</span></div>}
               {loyaltyDiscount > 0 && <div className="flex justify-between text-purple-600"><span>Loyalty Reward</span><span>-${loyaltyDiscount.toFixed(2)}</span></div>}
@@ -687,7 +726,7 @@ export default function CartPage() {
                 checkingOut ||
                 (!storeIsOpen && (!scheduleEnabled || !scheduledTimeOk))
               }
-              className="btn-primary w-full disabled:opacity-50"
+              className="w-full bg-primary text-white px-6 py-2 rounded-full hover:bg-secondary transition duration-300 disabled:opacity-50"
             >
               {checkingOut ? 'Processing…'
                 : !storeIsOpen && !scheduleEnabled ? 'Schedule Required (Store Closed)'

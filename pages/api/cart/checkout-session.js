@@ -11,6 +11,7 @@ import * as yup from 'yup';
 import { POINTS_PER_DOLLAR } from '../loyalty';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const DELIVERY_FEE_AMOUNT = 4.99;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -27,7 +28,7 @@ export default async function handler(req, res) {
         modifiers: yup.array().optional(),
       })
     ).min(1).required(),
-    orderType: yup.string().oneOf(['pickup']).optional(),
+    orderType: yup.string().oneOf(['pickup', 'delivery']).optional(),
     deliveryAddress: yup.string().optional().nullable(),
     appliedPromotions: yup.array().of(
       yup.object({
@@ -48,7 +49,19 @@ export default async function handler(req, res) {
 
   try {
     await schema.validate(req.body, { abortEarly: false });
-    const { items, appliedPromotions, customerEmail, customerPhone, scheduledTime, loyaltyDiscount = 0, loyaltyPointsUsed = 0, couponCode, referralCode } = req.body;
+    const {
+      items,
+      orderType = 'pickup',
+      deliveryAddress,
+      appliedPromotions,
+      customerEmail,
+      customerPhone,
+      scheduledTime,
+      loyaltyDiscount = 0,
+      loyaltyPointsUsed = 0,
+      couponCode,
+      referralCode,
+    } = req.body;
     const safeAppliedPromotions = Array.isArray(appliedPromotions) ? appliedPromotions : [];
     const normalizedPromotions = safeAppliedPromotions.filter((promo) => promo?.type !== 'free_delivery');
 
@@ -79,9 +92,14 @@ export default async function handler(req, res) {
       }
     }
 
-    // Delivery is disabled at checkout, so all new orders are pickup-only.
+    const isDelivery = orderType === 'delivery';
+    const safeDeliveryAddress = isDelivery ? String(deliveryAddress || '').trim() : '';
+    if (isDelivery && !safeDeliveryAddress) {
+      return res.status(400).json({ error: 'Delivery address is required for delivery orders.' });
+    }
+
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const deliveryFeeAmount = 0;
+    const deliveryFeeAmount = isDelivery ? DELIVERY_FEE_AMOUNT : 0;
     const discountAmount = normalizedPromotions.reduce((sum, p) => sum + (p.discountAmount || 0), 0);
     const provisionalTotal = Math.max(0, subtotal + deliveryFeeAmount - discountAmount - loyaltyDiscount - couponDiscount);
 
@@ -102,8 +120,8 @@ export default async function handler(req, res) {
       })),
       totalAmount: provisionalTotal, // store provisional total
       status: 'pending',
-      orderType: 'pickup',
-      deliveryAddress: '',
+      orderType,
+      deliveryAddress: safeDeliveryAddress,
       scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
       trackingNumber,
       paymentStatus: 'pending',
@@ -116,7 +134,8 @@ export default async function handler(req, res) {
     const orderPlacedHtml = `
       <h3>New Order Placed (Pending Payment)</h3>
       <p><strong>Tracking #:</strong> ${trackingNumber}</p>
-      <p><strong>Type:</strong> PICKUP</p>
+      <p><strong>Type:</strong> ${orderType.toUpperCase()}</p>
+      ${isDelivery ? `<p><strong>Address:</strong> ${safeDeliveryAddress}</p>` : ''}
       <p><strong>Email:</strong> ${customerEmail || 'N/A'}</p>
       <p><strong>Phone:</strong> ${customerPhone || 'N/A'}</p>
       <p><strong>Total:</strong> $${provisionalTotal.toFixed(2)}</p>
@@ -204,6 +223,7 @@ export default async function handler(req, res) {
         appliedPromotions: JSON.stringify(normalizedPromotions),
         customerEmail: customerEmail || '',
         customerPhone: customerPhone || '',
+        orderType,
         loyaltyDiscount: loyaltyDiscount.toString(),
       },
     });

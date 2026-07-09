@@ -3,6 +3,8 @@ import Order from '@/lib/models/Order';
 import Customer from '@/lib/models/Customer';
 import { POINTS_PER_DOLLAR } from '../loyalty';
 
+const DELIVERY_FEE_AMOUNT = 4.99;
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -22,7 +24,7 @@ export default async function handler(req, res) {
 
     // Compute total from items (including delivery fee and discount)
     const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const deliveryFee = (order.orderType === 'delivery' && !order.appliedPromotions.some(p => p.type === 'free_delivery')) ? 3 : 0;
+    const deliveryFee = (order.orderType === 'delivery' && !order.appliedPromotions.some(p => p.type === 'free_delivery')) ? DELIVERY_FEE_AMOUNT : 0;
     const discount = order.appliedPromotions.reduce((sum, p) => sum + p.discountAmount, 0);
     const computedTotal = Math.max(0, subtotal + deliveryFee - discount);
     order.totalAmount = computedTotal;
