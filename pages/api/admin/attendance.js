@@ -143,5 +143,48 @@ export default async function handler(req, res) {
     return res.json({ success: true, count: Number(updateResult.modifiedCount || 0), isPaid: Boolean(isPaid) });
   }
 
+  if (req.method === 'PATCH') {
+    const { id, employeeId, type, timestamp } = req.body || {};
+    if (!id) {
+      return res.status(400).json({ error: 'id is required' });
+    }
+    if (!type || !['login', 'logout'].includes(type)) {
+      return res.status(400).json({ error: 'type must be login or logout' });
+    }
+    if (!employeeId) {
+      return res.status(400).json({ error: 'employeeId is required' });
+    }
+    if (!timestamp) {
+      return res.status(400).json({ error: 'timestamp is required' });
+    }
+
+    const attendance = await Attendance.findById(id);
+    if (!attendance) {
+      return res.status(404).json({ error: 'Attendance record not found' });
+    }
+    if (attendance.isPaid) {
+      return res.status(400).json({ error: 'Paid attendance records cannot be edited' });
+    }
+
+    const employee = await Employee.findById(employeeId).lean();
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const when = new Date(timestamp);
+    if (Number.isNaN(when.getTime())) {
+      return res.status(400).json({ error: 'Invalid timestamp' });
+    }
+
+    attendance.employee = employeeId;
+    attendance.type = type;
+    attendance.timestamp = when;
+    attendance.userAgent = 'admin-manual-edit';
+    await attendance.save();
+
+    const populated = await Attendance.findById(attendance._id).populate('employee').lean();
+    return res.json(populated);
+  }
+
   res.status(405).end();
 }

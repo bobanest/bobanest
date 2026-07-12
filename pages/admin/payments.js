@@ -9,6 +9,12 @@ function round2(n) {
   return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 }
 
+function toDatetimeLocalInput(value) {
+  const d = new Date(value || Date.now());
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function AdminPayments() {
   const [payments, setPayments] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -24,6 +30,13 @@ export default function AdminPayments() {
   const [attendanceLoading, setAttendanceLoading] = useState(true);
   const [markingPaid, setMarkingPaid] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
+  const [editingAttendanceId, setEditingAttendanceId] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editAttendanceForm, setEditAttendanceForm] = useState({
+    employeeId: '',
+    type: 'login',
+    timestamp: '',
+  });
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('');
   const [manualForm, setManualForm] = useState({
@@ -304,6 +317,60 @@ export default function AdminPayments() {
     );
   }
 
+  function startEditAttendance(row) {
+    setEditingAttendanceId(row._id);
+    setEditAttendanceForm({
+      employeeId: row.employee?._id || '',
+      type: row.type || 'login',
+      timestamp: toDatetimeLocalInput(row.timestamp),
+    });
+    setMsg('');
+  }
+
+  function cancelEditAttendance() {
+    setEditingAttendanceId('');
+    setEditAttendanceForm({ employeeId: '', type: 'login', timestamp: '' });
+  }
+
+  async function saveAttendanceEdit() {
+    if (!editingAttendanceId) return;
+    if (!editAttendanceForm.employeeId || !editAttendanceForm.type || !editAttendanceForm.timestamp) {
+      setMsg('Please fill employee, type, and time before saving.');
+      setMsgType('error');
+      return;
+    }
+
+    setEditSaving(true);
+    setMsg('');
+    try {
+      const res = await fetch('/api/admin/attendance', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-employee-secret': API_SECRET,
+        },
+        body: JSON.stringify({
+          id: editingAttendanceId,
+          employeeId: editAttendanceForm.employeeId,
+          type: editAttendanceForm.type,
+          timestamp: new Date(editAttendanceForm.timestamp).toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update attendance record');
+
+      setAttendance((prev) => prev.map((row) => (row._id === data._id ? data : row)));
+      setMsg('Attendance record updated successfully.');
+      setMsgType('success');
+      cancelEditAttendance();
+    } catch (err) {
+      setMsg(err.message || 'Failed to update attendance record');
+      setMsgType('error');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   const totalGross = payments.reduce((sum, p) => sum + (p.gross || 0), 0);
   const totalHours = payments.reduce((sum, p) => sum + ((p.paidHours ?? p.hours) || 0), 0);
   const selectedPayrollRows = payrollRows.filter((row) => selectedPayrollEmployeeIds.includes(row.employeeId));
@@ -548,6 +615,7 @@ export default function AdminPayments() {
                       <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Type</th>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Time</th>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Paid</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -556,26 +624,64 @@ export default function AdminPayments() {
                         <td className="px-4 py-3 text-sm">
                           <input
                             type="checkbox"
-                            disabled={row.isPaid}
+                            disabled={row.isPaid || editingAttendanceId === row._id}
                             checked={selectedAttendanceIds.includes(row._id)}
                             onChange={() => toggleAttendanceRow(row._id)}
                           />
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {row.employee?.name || 'Unknown'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{row.employee?.assignedId || '—'}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span
-                            className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                              row.type === 'login' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
-                            {row.type === 'login' ? 'Clock In' : 'Clock Out'}
-                          </span>
+                          {editingAttendanceId === row._id ? (
+                            <select
+                              value={editAttendanceForm.employeeId}
+                              onChange={(e) => setEditAttendanceForm((prev) => ({ ...prev, employeeId: e.target.value }))}
+                              className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-52"
+                            >
+                              {employees.map((emp) => (
+                                <option key={emp._id} value={emp._id}>
+                                  {emp.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            row.employee?.name || 'Unknown'
+                          )}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {new Date(row.timestamp).toLocaleString()}
+                          {editingAttendanceId === row._id
+                            ? (employees.find((emp) => emp._id === editAttendanceForm.employeeId)?.assignedId || '—')
+                            : (row.employee?.assignedId || '—')}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {editingAttendanceId === row._id ? (
+                            <select
+                              value={editAttendanceForm.type}
+                              onChange={(e) => setEditAttendanceForm((prev) => ({ ...prev, type: e.target.value }))}
+                              className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                            >
+                              <option value="login">Clock In</option>
+                              <option value="logout">Clock Out</option>
+                            </select>
+                          ) : (
+                            <span
+                              className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+                                row.type === 'login' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
+                              }`}
+                            >
+                              {row.type === 'login' ? 'Clock In' : 'Clock Out'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {editingAttendanceId === row._id ? (
+                            <input
+                              type="datetime-local"
+                              value={editAttendanceForm.timestamp}
+                              onChange={(e) => setEditAttendanceForm((prev) => ({ ...prev, timestamp: e.target.value }))}
+                              className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                            />
+                          ) : (
+                            new Date(row.timestamp).toLocaleString()
+                          )}
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <span
@@ -585,6 +691,36 @@ export default function AdminPayments() {
                           >
                             {row.isPaid ? 'Paid' : 'Unpaid'}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {editingAttendanceId === row._id ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={saveAttendanceEdit}
+                                disabled={editSaving}
+                                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white px-3 py-1 rounded text-xs"
+                              >
+                                {editSaving ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEditAttendance}
+                                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={row.isPaid || (editingAttendanceId && editingAttendanceId !== row._id)}
+                              onClick={() => startEditAttendance(row)}
+                              className="bg-slate-100 hover:bg-slate-200 disabled:bg-gray-100 disabled:text-gray-400 text-slate-700 px-3 py-1 rounded text-xs"
+                            >
+                              Edit
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
