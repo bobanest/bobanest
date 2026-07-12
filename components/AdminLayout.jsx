@@ -49,6 +49,9 @@ const NAV_GROUPS = [
     links: [
       { href: '/admin/employees', label: '👥 Employees' },
       { href: '/admin/payments', label: '💰 Payroll' },
+      { href: '/admin/attendance-manual', label: '🕒 Manual Clock Entry' },
+      { href: '/admin/payment-records', label: '💳 Payment Records' },
+      { href: '/admin/payment-history', label: '📜 Payment History' },
     ],
   },
   {
