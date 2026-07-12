@@ -6,6 +6,7 @@ import Script from 'next/script';
 import { useEffect } from 'react';
 
 const GA_MEASUREMENT_ID = 'G-3TE06C5MK5';
+const GOOGLE_ADS_ID = 'AW-18032379000';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -58,6 +59,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
     const handleRouteChange = (url) => {
       if (!window.gtag) return;
       window.gtag('config', GA_MEASUREMENT_ID, { page_path: url });
+      window.gtag('config', GOOGLE_ADS_ID, { page_path: url });
     };
 
     router.events.on('routeChangeComplete', handleRouteChange);
@@ -69,7 +71,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
   return (
     <SessionProvider session={session}>
       <Script
-        src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+        src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`}
         strategy="afterInteractive"
       />
       <Script id="google-analytics" strategy="afterInteractive">
@@ -79,6 +81,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
           window.gtag = gtag;
           gtag('js', new Date());
           gtag('config', '${GA_MEASUREMENT_ID}');
+          gtag('config', '${GOOGLE_ADS_ID}');
         `}
       </Script>
       <CartProvider>
