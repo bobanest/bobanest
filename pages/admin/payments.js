@@ -17,6 +17,7 @@ function toDatetimeLocalInput(value) {
 
 export default function AdminPayments() {
   const [payments, setPayments] = useState([]);
+  const [paymentHistory, setPaymentHistory] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [selectedAttendanceIds, setSelectedAttendanceIds] = useState([]);
@@ -27,6 +28,7 @@ export default function AdminPayments() {
   const [running, setRunning] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [attendanceLoading, setAttendanceLoading] = useState(true);
   const [markingPaid, setMarkingPaid] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
@@ -47,6 +49,7 @@ export default function AdminPayments() {
 
   useEffect(() => {
     fetchList();
+    fetchPaymentHistory();
     fetchEmployees();
     fetchAttendance();
   }, []);
@@ -81,6 +84,24 @@ export default function AdminPayments() {
       console.error(err);
       setMsg('Failed to load employees');
       setMsgType('error');
+    }
+  }
+
+  async function fetchPaymentHistory() {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch('/api/admin/payments/history', {
+        headers: { 'x-employee-secret': API_SECRET },
+      });
+      if (!res.ok) throw new Error('Failed to fetch payment history');
+      const data = await res.json();
+      setPaymentHistory(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      setMsg('Failed to load payment history');
+      setMsgType('error');
+    } finally {
+      setHistoryLoading(false);
     }
   }
 
@@ -223,6 +244,7 @@ export default function AdminPayments() {
         setMsg(`Payroll created for ${data.payments?.length || 0} employees.`);
         setMsgType('success');
         fetchList();
+        fetchPaymentHistory();
       } else {
         setMsg(`Error: ${data.error || 'Failed to calculate payroll'}`);
         setMsgType('error');
@@ -781,6 +803,54 @@ export default function AdminPayments() {
                             {p.status?.charAt(0).toUpperCase() + p.status?.slice(1) || 'Pending'}
                           </span>
                         </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md overflow-hidden mb-8">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold">Payment History Ledger ({paymentHistory.length})</h2>
+              <p className="text-sm text-gray-500 mt-1">Immutable timeline of payment creation and status updates.</p>
+            </div>
+
+            {historyLoading ? (
+              <div className="p-10 text-center text-gray-500">Loading payment history...</div>
+            ) : paymentHistory.length === 0 ? (
+              <div className="p-10 text-center text-gray-500">No payment history found.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">When</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Employee</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Action</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Period</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Gross</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Note</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {paymentHistory.map((row) => (
+                      <tr key={row._id} className="hover:bg-gray-50 transition">
+                        <td className="px-6 py-4 text-sm text-gray-700">{new Date(row.createdAt).toLocaleString()}</td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{row.employee?.name || 'Unknown'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {row.action === 'created' ? 'Created' : 'Status Changed'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {row.previousStatus ? `${row.previousStatus} -> ${row.newStatus}` : row.newStatus}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {new Date(row.periodStart).toLocaleDateString()} - {new Date(row.periodEnd).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-semibold text-green-700">${round2(row.gross).toFixed(2)}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{row.note || '—'}</td>
                       </tr>
                     ))}
                   </tbody>

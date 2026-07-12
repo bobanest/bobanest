@@ -1,5 +1,6 @@
 import dbConnect from '@/lib/dbConnect';
 import Payment from '@/lib/models/Payment';
+import PaymentHistory from '@/lib/models/PaymentHistory';
 
 export default async function handler(req, res) {
   await dbConnect();
@@ -20,6 +21,7 @@ export default async function handler(req, res) {
       const normalizedHours = Number(hours ?? paidHours ?? 0);
       const normalizedPaidHours = Number(paidHours ?? normalizedHours);
       const normalizedTotalHours = Number(totalHours ?? normalizedHours);
+      const normalizedGross = Number(gross || 0);
       const p = await Payment.create({
         employee: employeeId,
         periodStart,
@@ -27,8 +29,20 @@ export default async function handler(req, res) {
         hours: normalizedHours,
         paidHours: normalizedPaidHours,
         totalHours: normalizedTotalHours,
-        gross: gross || 0,
+        gross: normalizedGross,
         status: 'pending'
+      });
+
+      await PaymentHistory.create({
+        payment: p._id,
+        employee: employeeId,
+        action: 'created',
+        previousStatus: null,
+        newStatus: 'pending',
+        gross: normalizedGross,
+        periodStart,
+        periodEnd,
+        note: 'Payment created manually',
       });
       return res.json(p);
     } catch (err) {

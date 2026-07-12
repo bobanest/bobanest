@@ -1,5 +1,6 @@
 import dbConnect from '@/lib/dbConnect';
 import Payment from '@/lib/models/Payment';
+import PaymentHistory from '@/lib/models/PaymentHistory';
 
 export default async function handler(req, res) {
   await dbConnect();
@@ -19,9 +20,27 @@ export default async function handler(req, res) {
     }
 
     try {
-      const payment = await Payment.findByIdAndUpdate(id, { status }, { new: true }).lean();
+      const payment = await Payment.findById(id);
       if (!payment) return res.status(404).json({ error: 'Payment not found' });
-      return res.json(payment);
+
+      const previousStatus = payment.status;
+      payment.status = status;
+      await payment.save();
+
+      await PaymentHistory.create({
+        payment: payment._id,
+        employee: payment.employee,
+        action: 'status_changed',
+        previousStatus,
+        newStatus: status,
+        gross: Number(payment.gross || 0),
+        periodStart: payment.periodStart,
+        periodEnd: payment.periodEnd,
+        note: 'Payment status updated by admin',
+      });
+
+      const updated = await Payment.findById(id).lean();
+      return res.json(updated);
     } catch (err) {
       console.error('Update payment error:', err);
       return res.status(500).json({ error: 'Failed to update payment status' });
