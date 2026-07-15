@@ -40,7 +40,7 @@ export default function AdminPaymentHistoryPage() {
 
   const filteredHistory = useMemo(() => {
     return history.filter((row) => {
-      const employeeName = String(row.employee?.name || '').toLowerCase();
+      const employeeName = String(row.employee?.name || row.employeeName || '').toLowerCase();
       const employeeOk = employeeFilter ? employeeName.includes(employeeFilter.toLowerCase()) : true;
       const actionOk = actionFilter ? row.action === actionFilter : true;
       return employeeOk && actionOk;
@@ -120,7 +120,7 @@ export default function AdminPaymentHistoryPage() {
                     {filteredHistory.map((row) => (
                       <tr key={row._id} className="hover:bg-gray-50 transition">
                         <td className="px-6 py-4 text-sm text-gray-700">{new Date(row.createdAt).toLocaleString()}</td>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{row.employee?.name || 'Unknown'}</td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{row.employee?.name || row.employeeName || 'Unknown'}</td>
                         <td className="px-6 py-4 text-sm text-gray-700">
                           {row.action === 'created' ? 'Created' : 'Status Changed'}
                         </td>

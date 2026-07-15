@@ -20,11 +20,11 @@ export default function AdminPaymentRecordsPage() {
   const [msgType, setMsgType] = useState('');
 
   const [form, setForm] = useState({
-    employeeId: '',
-    periodStart: '',
-    periodEnd: '',
-    paidHours: '',
+    employeeName: '',
+    paymentDate: new Date().toISOString().slice(0, 10),
+    totalHours: '',
     gross: '',
+    note: '',
   });
 
   const [statusDrafts, setStatusDrafts] = useState({});
@@ -70,16 +70,19 @@ export default function AdminPaymentRecordsPage() {
     e.preventDefault();
     setMsg('');
 
-    if (!form.employeeId || !form.periodStart || !form.periodEnd) {
-      setMsg('Employee, period start, and period end are required.');
+    if (!form.employeeName.trim() || !form.paymentDate) {
+      setMsg('Employee name and payment date are required.');
       setMsgType('error');
       return;
     }
 
     setCreating(true);
     try {
-      const paidHours = Number(form.paidHours || 0);
+      const paidHours = Number(form.totalHours || 0);
       const gross = Number(form.gross || 0);
+      const employeeByName = employees.find(
+        (e) => String(e.name || '').toLowerCase() === String(form.employeeName || '').trim().toLowerCase()
+      );
 
       const res = await fetch('/api/admin/payments', {
         method: 'POST',
@@ -88,13 +91,14 @@ export default function AdminPaymentRecordsPage() {
           'x-employee-secret': API_SECRET,
         },
         body: JSON.stringify({
-          employeeId: form.employeeId,
-          periodStart: new Date(form.periodStart).toISOString(),
-          periodEnd: new Date(form.periodEnd).toISOString(),
+          employeeId: employeeByName?._id || null,
+          employeeName: form.employeeName.trim(),
+          paymentDate: new Date(form.paymentDate).toISOString(),
           paidHours,
           totalHours: paidHours,
           hours: paidHours,
           gross,
+          note: form.note,
         }),
       });
 
@@ -103,7 +107,7 @@ export default function AdminPaymentRecordsPage() {
 
       setMsg('Manual payment record created.');
       setMsgType('success');
-      setForm({ employeeId: '', periodStart: '', periodEnd: '', paidHours: '', gross: '' });
+      setForm({ employeeName: '', paymentDate: new Date().toISOString().slice(0, 10), totalHours: '', gross: '', note: '' });
       await fetchPayments();
     } catch (err) {
       setMsg(err.message || 'Failed to create payment record');
@@ -168,62 +172,65 @@ export default function AdminPaymentRecordsPage() {
             <h2 className="text-xl font-bold mb-4">Manual Payment Entry</h2>
             <form onSubmit={createManualPayment} className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Employee</label>
-                <select
-                  value={form.employeeId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, employeeId: e.target.value }))}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Employee Name</label>
+                <input
+                  type="text"
+                  list="employee-names"
+                  placeholder="Enter employee name"
+                  value={form.employeeName}
+                  onChange={(e) => setForm((prev) => ({ ...prev, employeeName: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                   required
-                >
-                  <option value="">Select employee</option>
+                />
+                <datalist id="employee-names">
                   {employees.map((emp) => (
-                    <option key={emp._id} value={emp._id}>{emp.name} ({emp.assignedId || 'No ID'})</option>
+                    <option key={emp._id} value={emp.name} />
                   ))}
-                </select>
+                </datalist>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Period Start</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date of Payment</label>
                 <input
                   type="date"
-                  value={form.periodStart}
-                  onChange={(e) => setForm((prev) => ({ ...prev, periodStart: e.target.value }))}
+                  value={form.paymentDate}
+                  onChange={(e) => setForm((prev) => ({ ...prev, paymentDate: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Period End</label>
-                <input
-                  type="date"
-                  value={form.periodEnd}
-                  onChange={(e) => setForm((prev) => ({ ...prev, periodEnd: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Hours</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Total Hours</label>
                 <input
                   type="number"
                   step="0.25"
                   min="0"
-                  value={form.paidHours}
-                  onChange={(e) => setForm((prev) => ({ ...prev, paidHours: e.target.value }))}
+                  value={form.totalHours}
+                  onChange={(e) => setForm((prev) => ({ ...prev, totalHours: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Gross ($)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount of Payment ($)</label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
                   value={form.gross}
                   onChange={(e) => setForm((prev) => ({ ...prev, gross: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+                <input
+                  type="text"
+                  placeholder="Optional note"
+                  value={form.note}
+                  onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 />
               </div>
@@ -256,9 +263,10 @@ export default function AdminPaymentRecordsPage() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Employee</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Period</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Hours</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Gross</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Date of Payment</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Total Hours</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Amount</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Note</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
                       <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Action</th>
                     </tr>
@@ -266,12 +274,11 @@ export default function AdminPaymentRecordsPage() {
                   <tbody className="divide-y divide-gray-200">
                     {payments.map((p) => (
                       <tr key={p._id} className="hover:bg-gray-50 transition">
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{p.employee?.name || 'Unknown'}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {new Date(p.periodStart).toLocaleDateString()} - {new Date(p.periodEnd).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">{round2(p.paidHours ?? p.hours).toFixed(2)} hrs</td>
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{p.employee?.name || p.employeeName || 'Unknown'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{new Date(p.paymentDate || p.createdAt).toLocaleDateString()}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{round2(p.totalHours ?? p.paidHours ?? p.hours).toFixed(2)} hrs</td>
                         <td className="px-6 py-4 text-sm font-bold text-green-700">${round2(p.gross).toFixed(2)}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{p.note || '—'}</td>
                         <td className="px-6 py-4 text-sm">
                           <select
                             value={statusDrafts[p._id] || p.status || 'pending'}

@@ -30,6 +30,7 @@ export default async function handler(req, res) {
       await PaymentHistory.create({
         payment: payment._id,
         employee: payment.employee,
+        employeeName: payment.employeeName || '',
         action: 'status_changed',
         previousStatus,
         newStatus: status,
