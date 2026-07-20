@@ -181,8 +181,10 @@ async function sendWeeklySummaries(timeZone) {
 
 async function sendShiftReminders(timeZone) {
   const now = new Date();
+  
+  // Check for shifts starting between 2-3 hours from now (wider window for daily cron)
   const windowStart = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-  const windowEnd = new Date(now.getTime() + (2 * 60 + 16) * 60 * 1000);
+  const windowEnd = new Date(now.getTime() + 3 * 60 * 60 * 1000);
 
   const shifts = await EmployeeSchedule.find({
     isCancelled: { $ne: true },
