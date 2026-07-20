@@ -17,6 +17,7 @@ export default function AdminDashboard() {
     { href: '/admin/purchase-orders', label: '📋 Purchase Orders', desc: 'Create and track supplier POs' },
     // HR
     { href: '/admin/attendance-manual', label: '🕒 Manual Clock Entry', desc: 'Add and correct employee clock in/out records' },
+    { href: '/admin/employee-schedule', label: '🗓️ Work Schedule', desc: 'Manage monthly shifts and automatic employee reminders' },
     { href: '/admin/payment-records', label: '💳 Payment Records', desc: 'Manage payroll payment records and statuses' },
     { href: '/admin/payment-history', label: '📜 Payment History', desc: 'Review full payment ledger timeline' },
     // Marketing
@@ -42,9 +43,9 @@ export default function AdminDashboard() {
             { label: 'Sales & Orders', links: adminLinks.slice(0, 3) },
             { label: 'Products & Inventory', links: adminLinks.slice(3, 5) },
             { label: 'Financials', links: adminLinks.slice(5, 7) },
-            { label: 'HR & Payroll', links: adminLinks.slice(7, 10) },
-            { label: 'Marketing', links: adminLinks.slice(10, 14) },
-            { label: 'Content & Settings', links: adminLinks.slice(14) },
+            { label: 'HR & Payroll', links: adminLinks.slice(7, 11) },
+            { label: 'Marketing', links: adminLinks.slice(11, 15) },
+            { label: 'Content & Settings', links: adminLinks.slice(15) },
           ].map(section => (
             <div key={section.label} className="mb-8">
               <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">{section.label}</h2>

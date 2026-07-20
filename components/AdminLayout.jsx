@@ -40,6 +40,7 @@ const NAV_GROUPS = [
     links: [
       { href: '/admin/expenses', label: 'Expenses' },
       { href: '/admin/purchase-orders', label: 'Purchase Orders' },
+      { href: '/admin/inventory-prices', label: 'Product Price Table' },
       { href: '/admin/cost-analysis', label: 'Cost Analysis' },
       { href: '/admin/profit-analysis', label: 'Profit Analysis' },
     ],
@@ -48,6 +49,7 @@ const NAV_GROUPS = [
     label: 'HR & Staff',
     links: [
       { href: '/admin/employees', label: '👥 Employees' },
+      { href: '/admin/employee-schedule', label: '🗓️ Work Schedule' },
       { href: '/admin/payments', label: '💰 Payroll' },
       { href: '/admin/attendance-manual', label: '🕒 Manual Clock Entry' },
       { href: '/admin/payment-records', label: '💳 Payment Records' },

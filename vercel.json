@@ -6,6 +6,10 @@
     {
       "path": "/api/admin/shift4-sync",
       "schedule": "59 23 * * *"
+    },
+    {
+      "path": "/api/admin/employee-schedule-notify",
+      "schedule": "*/15 * * * *"
     }
   ]
 }	
