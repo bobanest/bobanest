@@ -10,17 +10,79 @@ export default function AdminCustomers() {
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [form, setForm] = useState({ name: '', email: '', points: 0 });
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('success');
 
   useEffect(() => {
-    fetch('/api/admin/customers').then(r => r.json()).then(d => { setCustomers(d); setLoading(false); });
+    fetchCustomers();
   }, []);
+
+  const fetchCustomers = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/admin/customers');
+      const data = await response.json();
+      setCustomers(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+      setMessage('Failed to load customers.');
+      setMessageType('error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadDetail = async (email) => {
     setSelected(email);
     setLoadingDetail(true);
-    const res = await fetch(`/api/admin/customers?email=${encodeURIComponent(email)}`);
-    setDetail(await res.json());
-    setLoadingDetail(false);
+    try {
+      const res = await fetch(`/api/admin/customers?email=${encodeURIComponent(email)}`);
+      setDetail(await res.json());
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  const saveCustomer = async (event) => {
+    event.preventDefault();
+    setMessage('');
+
+    if (!form.name.trim() || !form.email.trim()) {
+      setMessage('Name and email are required.');
+      setMessageType('error');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch('/api/admin/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          points: Number(form.points) || 0,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save customer');
+      }
+
+      setMessage('Customer saved successfully.');
+      setMessageType('success');
+      setForm({ name: '', email: '', points: 0 });
+      await fetchCustomers();
+      await loadDetail(data.email);
+    } catch (error) {
+      setMessage(error.message || 'Failed to save customer.');
+      setMessageType('error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const filtered = customers.filter(c =>
@@ -37,6 +99,69 @@ export default function AdminCustomers() {
         <div className="p-8 max-w-7xl mx-auto">
           <h1 className="text-3xl font-bold mb-2">Customer Management</h1>
           <p className="text-gray-500 mb-6">{customers.length} customers</p>
+
+          {message && (
+            <div className={`mb-6 rounded-lg border px-4 py-3 text-sm ${messageType === 'success' ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+              {message}
+            </div>
+          )}
+
+          <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-xl font-semibold">Add Customer Manually</h2>
+                <p className="text-sm text-gray-500">Create a customer record for loyalty points and future order tracking.</p>
+              </div>
+            </div>
+
+            <form onSubmit={saveCustomer} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="e.g. Sarah Johnson"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="customer@example.com"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Starting Points</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.points}
+                  onChange={(e) => setForm({ ...form, points: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                />
+              </div>
+
+              <div className="md:col-span-4 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium px-5 py-2 rounded-lg transition"
+                >
+                  {saving ? 'Saving...' : 'Add Customer'}
+                </button>
+              </div>
+            </form>
+          </div>
 
           <div className="flex gap-6">
             {/* Customer list */}
