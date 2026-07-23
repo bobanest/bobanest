@@ -1,6 +1,7 @@
 import dbConnect from '@/lib/dbConnect';
 import Order from '@/lib/models/Order';
 import Stripe from 'stripe';
+import { redeemGiftCardBalance } from '@/lib/giftCardService';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -31,6 +32,16 @@ export default async function handler(req, res) {
     order.paymentStatus = 'paid';
     order.status = 'pending'; // keep as pending until admin confirms
     await order.save();
+
+    if (order.giftCardCode && Number(order.giftCardRedeemedAmount || 0) > 0) {
+      await redeemGiftCardBalance({
+        code: order.giftCardCode,
+        amount: Number(order.giftCardRedeemedAmount || 0),
+        channel: 'web',
+        orderId: order._id,
+        note: `Online checkout payment (${order.trackingNumber})`,
+      });
+    }
 
     res.status(200).json({ order });
   } catch (err) {

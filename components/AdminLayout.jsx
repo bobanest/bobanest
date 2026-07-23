@@ -40,6 +40,7 @@ const NAV_GROUPS = [
     links: [
       { href: '/admin/expenses', label: 'Expenses' },
       { href: '/admin/purchase-orders', label: 'Purchase Orders' },
+      { href: '/admin/gift-cards', label: '🎁 Gift Cards' },
       { href: '/admin/inventory-prices', label: 'Product Price Table' },
       { href: '/admin/cost-analysis', label: 'Cost Analysis' },
       { href: '/admin/profit-analysis', label: 'Profit Analysis' },

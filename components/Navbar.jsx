@@ -14,6 +14,7 @@ export default function Navbar() {
     { href: '/products', label: 'Menu' },
     { href: '/build-your-own-fruit-tea', label: 'Build Tea' },
     { href: '/catering', label: 'Catering' },
+    { href: '/gift-cards', label: 'Gift Cards' },
     { href: '/contact', label: 'Contact' },
     { href: '/track-order', label: 'Track Order' },
     { href: '/loyalty', label: 'Rewards' },

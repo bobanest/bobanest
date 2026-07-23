@@ -4,9 +4,11 @@ import dbConnect from '@/lib/dbConnect';
 import Order from '@/lib/models/Order';
 import Customer from '@/lib/models/Customer';
 import PromoCode from '@/lib/models/PromoCode';
+import GiftCard from '@/lib/models/GiftCard';
 import StoreHours from '@/lib/models/StoreHours';
 import { getStoreStatusAt, isDateTimeOpen } from '@/lib/storeHoursHelper';
 import { sendOwnerEmail } from '@/lib/ownerEmail';
+import { normalizeGiftCardCode, redeemGiftCardBalance } from '@/lib/giftCardService';
 import * as yup from 'yup';
 import { POINTS_PER_DOLLAR } from '../loyalty';
 
@@ -46,6 +48,7 @@ export default async function handler(req, res) {
     loyaltyPointsUsed: yup.number().min(0).optional(),
     couponCode: yup.string().optional().nullable(),
     referralCode: yup.string().optional().nullable(),
+    giftCardCode: yup.string().optional().nullable(),
   });
 
   try {
@@ -62,6 +65,7 @@ export default async function handler(req, res) {
       loyaltyPointsUsed = 0,
       couponCode,
       referralCode,
+      giftCardCode,
     } = req.body;
     const safeAppliedPromotions = Array.isArray(appliedPromotions) ? appliedPromotions : [];
     const normalizedPromotions = safeAppliedPromotions.filter((promo) => promo?.type !== 'free_delivery');
@@ -108,7 +112,30 @@ export default async function handler(req, res) {
         error: `Delivery is available only when order subtotal is more than $${DELIVERY_MIN_ORDER_SUBTOTAL.toFixed(2)}.`,
       });
     }
-    const provisionalTotal = Math.max(0, subtotal + deliveryFeeAmount - discountAmount - loyaltyDiscount - couponDiscount);
+    let provisionalTotal = Math.max(0, subtotal + deliveryFeeAmount - discountAmount - loyaltyDiscount - couponDiscount);
+
+    let normalizedGiftCardCode = null;
+    let giftCardRedeemedAmount = 0;
+    if (giftCardCode) {
+      normalizedGiftCardCode = normalizeGiftCardCode(giftCardCode);
+      if (!normalizedGiftCardCode) {
+        return res.status(400).json({ error: 'Gift card code is invalid' });
+      }
+
+      const giftCard = await GiftCard.findOne({
+        code: normalizedGiftCardCode,
+        status: 'active',
+      }).lean();
+      if (!giftCard) {
+        return res.status(400).json({ error: 'Gift card is invalid or inactive' });
+      }
+      if (Number(giftCard.balance || 0) <= 0) {
+        return res.status(400).json({ error: 'Gift card has no available balance' });
+      }
+
+      giftCardRedeemedAmount = Math.min(Number(giftCard.balance || 0), provisionalTotal);
+      provisionalTotal = Math.max(0, provisionalTotal - giftCardRedeemedAmount);
+    }
 
     // Generate a referral code for new customers
     const newReferralCode = `BN${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
@@ -136,6 +163,8 @@ export default async function handler(req, res) {
       couponCode: validatedCouponCode,
       couponDiscount,
       referralCode: referralCode ? referralCode.toUpperCase().trim() : null,
+      giftCardCode: normalizedGiftCardCode,
+      giftCardRedeemedAmount,
     });
 
     const orderPlacedHtml = `
@@ -218,6 +247,35 @@ export default async function handler(req, res) {
         quantity: 1,
       });
     }
+    if (giftCardRedeemedAmount > 0) {
+      lineItems.push({
+        price_data: {
+          currency: 'usd',
+          product_data: { name: `Gift Card (${normalizedGiftCardCode})` },
+          unit_amount: -Math.round(giftCardRedeemedAmount * 100),
+        },
+        quantity: 1,
+      });
+    }
+
+    if (provisionalTotal <= 0) {
+      order.paymentStatus = 'paid';
+      order.totalAmount = 0;
+      order.status = 'pending';
+      await order.save();
+
+      if (giftCardRedeemedAmount > 0 && normalizedGiftCardCode) {
+        await redeemGiftCardBalance({
+          code: normalizedGiftCardCode,
+          amount: giftCardRedeemedAmount,
+          channel: 'web',
+          orderId: order._id,
+          note: 'Online checkout fully covered by gift card',
+        });
+      }
+
+      return res.status(200).json({ paidWithoutStripe: true, orderId: order._id.toString() });
+    }
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -232,6 +290,8 @@ export default async function handler(req, res) {
         customerPhone: customerPhone || '',
         orderType,
         loyaltyDiscount: loyaltyDiscount.toString(),
+        giftCardCode: normalizedGiftCardCode || '',
+        giftCardRedeemedAmount: giftCardRedeemedAmount.toString(),
       },
     });
 

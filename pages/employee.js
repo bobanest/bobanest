@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Link from 'next/link';
 
 const API_SECRET = process.env.NEXT_PUBLIC_EMPLOYEE_API_SECRET || '';
 
@@ -126,6 +127,12 @@ export default function EmployeeClock() {
               <li>The page will show <strong>Clock In</strong> or <strong>Clock Out</strong> based on your current status.</li>
               <li>A confirmation will display instantly.</li>
             </ul>
+          </div>
+
+          <div className="text-center">
+            <Link href="/employee-gift-cards" className="text-sm font-semibold text-indigo-600 underline">
+              Open Gift Card Redemption
+            </Link>
           </div>
 
           {!API_SECRET && (

@@ -2,6 +2,7 @@ import dbConnect from '@/lib/dbConnect';
 import Order from '@/lib/models/Order';
 import Customer from '@/lib/models/Customer';
 import { POINTS_PER_DOLLAR } from '../loyalty';
+import { redeemGiftCardBalance } from '@/lib/giftCardService';
 
 const DELIVERY_FEE_AMOUNT = 4.99;
 
@@ -30,6 +31,16 @@ export default async function handler(req, res) {
     order.totalAmount = computedTotal;
     order.paymentStatus = 'paid';
     await order.save();
+
+    if (order.giftCardCode && Number(order.giftCardRedeemedAmount || 0) > 0) {
+      await redeemGiftCardBalance({
+        code: order.giftCardCode,
+        amount: Number(order.giftCardRedeemedAmount || 0),
+        channel: 'web',
+        orderId: order._id,
+        note: `Payment update (${order.trackingNumber})`,
+      });
+    }
 
     // Award loyalty points: 1 point per $1 of the final total
     if (order.customerEmail) {

@@ -15,6 +15,7 @@ export default function AdminDashboard() {
     // Financials
     { href: '/admin/expenses', label: '💸 Expenses', desc: 'Track business costs by category and month' },
     { href: '/admin/purchase-orders', label: '📋 Purchase Orders', desc: 'Create and track supplier POs' },
+    { href: '/admin/gift-cards', label: '🎁 Gift Cards', desc: 'Manage virtual gift cards, balances, and redemptions' },
     // HR
     { href: '/admin/attendance-manual', label: '🕒 Manual Clock Entry', desc: 'Add and correct employee clock in/out records' },
     { href: '/admin/employee-schedule', label: '🗓️ Work Schedule', desc: 'Manage monthly shifts and automatic employee reminders' },
@@ -42,10 +43,10 @@ export default function AdminDashboard() {
           {[
             { label: 'Sales & Orders', links: adminLinks.slice(0, 3) },
             { label: 'Products & Inventory', links: adminLinks.slice(3, 5) },
-            { label: 'Financials', links: adminLinks.slice(5, 7) },
-            { label: 'HR & Payroll', links: adminLinks.slice(7, 11) },
-            { label: 'Marketing', links: adminLinks.slice(11, 15) },
-            { label: 'Content & Settings', links: adminLinks.slice(15) },
+            { label: 'Financials', links: adminLinks.slice(5, 8) },
+            { label: 'HR & Payroll', links: adminLinks.slice(8, 12) },
+            { label: 'Marketing', links: adminLinks.slice(12, 16) },
+            { label: 'Content & Settings', links: adminLinks.slice(16) },
           ].map(section => (
             <div key={section.label} className="mb-8">
               <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">{section.label}</h2>

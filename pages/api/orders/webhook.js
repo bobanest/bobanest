@@ -3,6 +3,10 @@ import dbConnect from '@/lib/dbConnect';
 import Order from '@/lib/models/Order';
 import FacebookTracking from '@/lib/models/FacebookTracking';
 import { sendOwnerEmail } from '@/lib/ownerEmail';
+import GiftCard from '@/lib/models/GiftCard';
+import GiftCardTransaction from '@/lib/models/GiftCardTransaction';
+import { sendGiftCardEmail } from '@/lib/giftCardEmail';
+import { redeemGiftCardBalance } from '@/lib/giftCardService';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -113,6 +117,52 @@ export default async function handler(req, res) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const orderId = session.metadata.orderId;
+    const giftCardId = session.metadata.giftCardId;
+
+    if (giftCardId) {
+      const giftCard = await GiftCard.findById(giftCardId);
+      if (giftCard) {
+        giftCard.status = 'active';
+        giftCard.purchasedAt = new Date();
+        giftCard.stripeSessionId = session.id || '';
+        giftCard.stripePaymentIntentId = String(session.payment_intent || '');
+        await giftCard.save();
+
+        const existingPurchaseTx = await GiftCardTransaction.findOne({
+          giftCard: giftCard._id,
+          type: 'purchase',
+          stripeSessionId: session.id || '',
+        }).lean();
+        if (!existingPurchaseTx) {
+          await GiftCardTransaction.create({
+            giftCard: giftCard._id,
+            code: giftCard.code,
+            type: 'purchase',
+            channel: 'web',
+            amount: Number(giftCard.initialAmount || 0),
+            balanceBefore: 0,
+            balanceAfter: Number(giftCard.balance || 0),
+            stripeSessionId: session.id || '',
+            note: 'Gift card purchased online',
+          });
+        }
+
+        const sent = await sendGiftCardEmail({
+          to: giftCard.recipientEmail,
+          recipientName: giftCard.recipientName,
+          purchaserName: giftCard.purchaserName,
+          code: giftCard.code,
+          amount: giftCard.initialAmount,
+          balance: giftCard.balance,
+          message: giftCard.message,
+        });
+
+        giftCard.deliveryStatus = sent.sent ? 'sent' : 'failed';
+        giftCard.deliverySentAt = sent.sent ? new Date() : null;
+        await giftCard.save();
+      }
+    }
+
     if (orderId) {
       const order = await Order.findById(orderId);
       if (order) {
@@ -130,6 +180,16 @@ export default async function handler(req, res) {
         } catch (e) {}
         await order.save();
         console.log(`Order ${order.trackingNumber} updated after payment.`);
+
+        if (order.giftCardCode && Number(order.giftCardRedeemedAmount || 0) > 0) {
+          await redeemGiftCardBalance({
+            code: order.giftCardCode,
+            amount: Number(order.giftCardRedeemedAmount || 0),
+            channel: 'web',
+            orderId: order._id,
+            note: `Online checkout payment (${order.trackingNumber})`,
+          });
+        }
 
         // Send Facebook Purchase event
         await sendFacebookPurchaseEvent(order, req);

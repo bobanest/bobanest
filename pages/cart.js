@@ -87,6 +87,10 @@ export default function CartPage() {
   const [appliedCoupon, setAppliedCoupon] = useState(null); // { code, discount, description }
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState('');
+  const [giftCardInput, setGiftCardInput] = useState('');
+  const [appliedGiftCard, setAppliedGiftCard] = useState(null); // { code, balance, status }
+  const [giftCardLoading, setGiftCardLoading] = useState(false);
+  const [giftCardError, setGiftCardError] = useState('');
 
   // Referral code
   const [referralInput, setReferralInput] = useState('');
@@ -108,7 +112,8 @@ export default function CartPage() {
   const discountedSubtotal = Math.max(0, totalPrice - discount - loyaltyDiscount - couponDiscount);
   const deliveryEligible = discountedSubtotal > DELIVERY_MIN_ORDER_SUBTOTAL;
   const deliveryFee = orderType === 'delivery' ? DELIVERY_FEE_AMOUNT : 0;
-  const finalTotal = Math.max(0, totalPrice + tax + deliveryFee - discount - loyaltyDiscount - couponDiscount);
+  const giftCardDiscount = appliedGiftCard ? Math.min(Number(appliedGiftCard.balance || 0), Math.max(0, totalPrice + tax + deliveryFee - discount - loyaltyDiscount - couponDiscount)) : 0;
+  const finalTotal = Math.max(0, totalPrice + tax + deliveryFee - discount - loyaltyDiscount - couponDiscount - giftCardDiscount);
 
   useEffect(() => {
     if (orderType === 'delivery' && !deliveryEligible) {
@@ -310,6 +315,34 @@ export default function CartPage() {
     }
   };
 
+  const handleApplyGiftCard = async () => {
+    if (!giftCardInput.trim()) return;
+    setGiftCardLoading(true);
+    setGiftCardError('');
+    setAppliedGiftCard(null);
+    try {
+      const res = await fetch('/api/gift-cards/balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: giftCardInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setGiftCardError(data.error || 'Unable to apply gift card');
+      } else {
+        setAppliedGiftCard({
+          code: data.normalizedCode,
+          balance: Number(data.balance || 0),
+          status: data.status,
+        });
+      }
+    } catch {
+      setGiftCardError('Unable to apply gift card right now');
+    } finally {
+      setGiftCardLoading(false);
+    }
+  };
+
   const handleCheckout = async () => {
     if (items.length === 0) return;
     if (!customerPhone.trim()) {
@@ -352,6 +385,7 @@ export default function CartPage() {
           appliedPromotions,
           couponCode: appliedCoupon ? appliedCoupon.code : null,
           referralCode: referralValidated ? referralInput.trim().toUpperCase() : null,
+          giftCardCode: appliedGiftCard ? appliedGiftCard.code : null,
           customerEmail: customerEmail || null,
           customerPhone: customerPhone || null,
           scheduledTime: scheduleEnabled ? new Date(scheduledTime).toISOString() : null,
@@ -361,6 +395,11 @@ export default function CartPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Checkout failed');
+      if (data.paidWithoutStripe && data.orderId) {
+        clearCart();
+        window.location.href = `/track-order?order_id=${data.orderId}`;
+        return;
+      }
       const stripe = await stripePromise;
       const { error: stripeError } = await stripe.redirectToCheckout({ sessionId: data.id });
       if (stripeError) throw new Error(stripeError.message);
@@ -730,6 +769,43 @@ export default function CartPage() {
               )}
             </div>
 
+            {/* Gift Card */}
+            <div>
+              <label className="block font-semibold text-sm mb-1">Gift Card</label>
+              {appliedGiftCard ? (
+                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded p-2 text-sm">
+                  <span className="text-emerald-700 font-semibold">✓ {appliedGiftCard.code} (${Number(appliedGiftCard.balance).toFixed(2)} available)</span>
+                  <button
+                    onClick={() => {
+                      setAppliedGiftCard(null);
+                      setGiftCardInput('');
+                    }}
+                    className="text-xs text-gray-500 hover:text-red-500"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter gift card code"
+                    value={giftCardInput}
+                    onChange={(e) => setGiftCardInput(e.target.value.toUpperCase())}
+                    className="flex-1 border p-2 rounded text-sm uppercase"
+                  />
+                  <button
+                    onClick={handleApplyGiftCard}
+                    disabled={giftCardLoading || !giftCardInput.trim()}
+                    className="bg-secondary text-white px-3 py-2 rounded text-sm disabled:opacity-50"
+                  >
+                    {giftCardLoading ? '...' : 'Apply'}
+                  </button>
+                </div>
+              )}
+              {giftCardError && <p className="text-red-500 text-xs mt-1">{giftCardError}</p>}
+            </div>
+
             {/* Price Breakdown */}
             <div className="pt-2 border-t space-y-1 text-sm">
               <div className="flex justify-between"><span>Subtotal</span><span>${totalPrice.toFixed(2)}</span></div>
@@ -738,6 +814,7 @@ export default function CartPage() {
               {discount > 0 && <div className="flex justify-between text-green-600"><span>Promo Discount</span><span>-${discount.toFixed(2)}</span></div>}
               {couponDiscount > 0 && <div className="flex justify-between text-green-600"><span>Coupon ({appliedCoupon.code})</span><span>-${couponDiscount.toFixed(2)}</span></div>}
               {loyaltyDiscount > 0 && <div className="flex justify-between text-purple-600"><span>Loyalty Reward</span><span>-${loyaltyDiscount.toFixed(2)}</span></div>}
+              {giftCardDiscount > 0 && <div className="flex justify-between text-emerald-700"><span>Gift Card</span><span>-${giftCardDiscount.toFixed(2)}</span></div>}
               <div className="flex justify-between text-gray-600"><span>Discounted Subtotal</span><span>${discountedSubtotal.toFixed(2)}</span></div>
               <div className="flex justify-between font-bold text-base pt-2 border-t"><span>Total</span><span>${finalTotal.toFixed(2)}</span></div>
             </div>
