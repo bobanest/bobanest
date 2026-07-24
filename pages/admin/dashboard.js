@@ -31,7 +31,7 @@ export default function AdminDashboard() {
     { href: '/admin/hero', label: '🎨 Hero Section', desc: 'Change homepage hero image and text' },
     { href: '/admin/daily-posts', label: '📸 Daily Posts', desc: 'Manage Instagram feed (static)' },
     { href: '/admin/instagram', label: '📷 Instagram Settings', desc: 'Set your Instagram handle' },
-    { href: '/admin/reports', label: '📍 Visitor Reports', desc: 'Visitor location analytics' },
+    { href: '/admin/reports', label: '📈 Reports Center', desc: 'Date-range drink sales, product filters, and standard reports' },
   ];
 
   return (

@@ -47,6 +47,13 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: 'Reports',
+    links: [
+      { href: '/admin/reports', label: '📈 Reports Center' },
+      { href: '/admin/analytics', label: '📊 Sales Analytics' },
+    ],
+  },
+  {
     label: 'HR & Staff',
     links: [
       { href: '/admin/employees', label: '👥 Employees' },
