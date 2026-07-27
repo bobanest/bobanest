@@ -29,6 +29,7 @@ export default function ProductsPage({ products, promotions }) {
   const categories = [...new Set(products.map(p => p.category))];
   const [activeCategory, setActiveCategory] = useState(categories[0] || '');
   const [modalProduct, setModalProduct] = useState(null);
+  const [modifierGroups, setModifierGroups] = useState([]);
   const [activeDescriptionProductId, setActiveDescriptionProductId] = useState(null);
   const { addToCart } = useCart();
   const categoryRefs = useRef({});
@@ -49,6 +50,25 @@ export default function ProductsPage({ products, promotions }) {
     if (descriptionTimeoutRef.current) {
       clearTimeout(descriptionTimeoutRef.current);
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchModifiers = async () => {
+      try {
+        const res = await fetch('/api/admin/modifiers');
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data)) {
+          setModifierGroups(data);
+        }
+      } catch {
+        if (!cancelled) setModifierGroups([]);
+      }
+    };
+    fetchModifiers();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Scroll spy for sticky categories
@@ -158,6 +178,7 @@ export default function ProductsPage({ products, promotions }) {
       {modalProduct && (
         <ProductModal
           product={modalProduct}
+          modifierGroups={modifierGroups}
           onClose={() => setModalProduct(null)}
           onAddToCart={handleAddToCart}
         />

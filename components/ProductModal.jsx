@@ -4,10 +4,18 @@ import axios from 'axios';
 
 const STARS = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
 
-export default function ProductModal({ product, onClose, onAddToCart }) {
-  const [modifiers, setModifiers] = useState([]);
+function isModifierApplicable(group, productId) {
+  if (!group) return false;
+  const applicable = Array.isArray(group.applicableProducts) ? group.applicableProducts : [];
+  if (applicable.length === 0) return true;
+  const normalizedProductId = String(productId || '');
+  return applicable.some((item) => String(item?._id || item) === normalizedProductId);
+}
+
+export default function ProductModal({ product, onClose, onAddToCart, modifierGroups = [] }) {
+  const [modifiers, setModifiers] = useState(() => modifierGroups.filter((group) => isModifierApplicable(group, product._id)));
   const [selectedOptions, setSelectedOptions] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [loadingModifiers, setLoadingModifiers] = useState(false);
   const [totalPrice, setTotalPrice] = useState(product.price);
   const [reviews, setReviews] = useState([]);
   const [showReviews, setShowReviews] = useState(false);
@@ -20,6 +28,33 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
       .then(res => setReviews(res.data.filter(r => r.verified)))
       .catch(() => {});
   }, [product._id]);
+
+  useEffect(() => {
+    const localApplicable = modifierGroups.filter((group) => isModifierApplicable(group, product._id));
+    setModifiers(localApplicable);
+    setSelectedOptions({});
+
+    if (localApplicable.length > 0 || modifierGroups.length > 0) {
+      setLoadingModifiers(false);
+      return;
+    }
+
+    const fetchModifiers = async () => {
+      setLoadingModifiers(true);
+      try {
+        const res = await axios.get('/api/admin/modifiers');
+        const allGroups = Array.isArray(res.data) ? res.data : [];
+        setModifiers(allGroups.filter((group) => isModifierApplicable(group, product._id)));
+      } catch (err) {
+        console.error('Failed to load modifiers', err);
+        setModifiers([]);
+      } finally {
+        setLoadingModifiers(false);
+      }
+    };
+
+    fetchModifiers();
+  }, [modifierGroups, product._id]);
 
   const avgRating = reviews.length
     ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
@@ -44,25 +79,6 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
       setSubmittingReview(false);
     }
   };
-
-  useEffect(() => {
-    const fetchModifiers = async () => {
-      try {
-        const res = await axios.get('/api/admin/modifiers');
-        // Filter modifiers that apply to this product
-        const applicable = res.data.filter(group =>
-          group.applicableProducts.length === 0 ||
-          group.applicableProducts.some(p => p._id === product._id)
-        );
-        setModifiers(applicable);
-      } catch (err) {
-        console.error('Failed to load modifiers', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchModifiers();
-  }, [product._id]);
 
   useEffect(() => {
     let additional = 0;
@@ -130,7 +146,7 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
     onClose();
   };
 
-  if (loading) {
+  if (loadingModifiers) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6">Loading options...</div>
@@ -151,7 +167,7 @@ export default function ProductModal({ product, onClose, onAddToCart }) {
           )}
           <p className="text-gray-600 mb-4">{product.description}</p>
 
-          {modifiers.length === 0 && (
+          {modifiers.length === 0 && !loadingModifiers && (
             <p className="text-gray-500 mb-4">No options to customize.</p>
           )}
 
