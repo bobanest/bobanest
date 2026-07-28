@@ -1,63 +1,126 @@
 'use client';
 import Link from 'next/link';
 import { useCart } from './CartContext';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
+import CartDrawer from './CartDrawer';
 
-export default function Navbar() {
-  const { totalItems } = useCart();
+export default function Navbar({ dark = false }) {
+  const { totalItems, openCart } = useCart();
   const { data: session } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef(null);
 
-  const navLinks = [
+  const primaryLinks = [
     { href: '/', label: 'Home' },
     { href: '/products', label: 'Menu' },
     { href: '/build-your-own-fruit-tea', label: 'Build Tea' },
+    { href: '/loyalty', label: 'Rewards' },
+  ];
+  const moreLinks = [
     { href: '/catering', label: 'Catering' },
     { href: '/gift-cards', label: 'Gift Cards' },
     { href: '/contact', label: 'Contact' },
     { href: '/track-order', label: 'Track Order' },
-    { href: '/loyalty', label: 'Rewards' },
   ];
 
+  const base = dark
+    ? 'bg-[#120a07]/95 backdrop-blur border-b border-white/8 sticky top-0 z-50'
+    : 'bg-white shadow-md sticky top-0 z-50';
+  const logoText = dark ? 'text-[#e8a33d]' : 'text-primary';
+  const linkClass = dark
+    ? 'text-[#d4b896] hover:text-[#e8a33d] transition font-medium'
+    : 'text-dark hover:text-primary transition';
+  const cartColor = dark ? 'text-[#d4b896] hover:text-[#e8a33d]' : 'text-dark';
+  const badgeBg = dark ? 'bg-[#e8a33d] text-[#1a0f0c]' : 'bg-secondary text-white';
+  const hamburgerColor = dark ? 'text-[#d4b896]' : 'text-dark';
+  const mobileOverlay = dark ? 'bg-[#120a07]' : 'bg-white';
+  const mobileLinkClass = dark ? 'text-[#f5e6c8] hover:text-[#e8a33d] transition' : 'text-dark hover:text-primary transition';
+  const dropdownBg = dark ? 'bg-[#1a0f0c] border-white/10' : 'bg-white border-gray-200';
+  const dropdownLinkClass = dark
+    ? 'block px-4 py-2 text-sm text-[#d4b896] hover:bg-white/5 hover:text-[#e8a33d] transition'
+    : 'block px-4 py-2 text-sm text-dark hover:bg-gray-50 hover:text-primary transition';
+
+  useEffect(() => {
+    const onDocClick = (event) => {
+      if (!moreMenuRef.current) return;
+      if (!moreMenuRef.current.contains(event.target)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
   return (
-    <nav className="bg-white shadow-md sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <>
+    <nav className={base}>
+      <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="h-10 w-10 bg-primary rounded-full flex items-center justify-center text-white font-bold text-xl">
+          <Link href="/" className="flex items-center space-x-2 shrink-0">
+            <div className={`h-10 w-10 ${dark ? 'bg-[#e8a33d]' : 'bg-primary'} rounded-full flex items-center justify-center ${dark ? 'text-[#1a0f0c]' : 'text-white'} font-bold text-xl`}>
               B
             </div>
-            <span className="text-2xl font-bold text-primary">Bobanest</span>
+            <span className={`text-xl sm:text-2xl font-bold ${logoText}`}>Bobanest</span>
           </Link>
 
           {/* Desktop Menu */}
-          <div className="hidden md:flex space-x-8">
-            {navLinks.map(link => (
-              <Link key={link.href} href={link.href} className="text-dark hover:text-primary transition">
+          <div className="hidden md:flex space-x-4 lg:space-x-5 items-center">
+            {primaryLinks.map(link => (
+              <Link key={link.href} href={link.href} className={linkClass}>
                 {link.label}
               </Link>
             ))}
+            <div className="relative" ref={moreMenuRef}>
+              <button
+                onClick={() => setMoreMenuOpen((v) => !v)}
+                className={`${linkClass} inline-flex items-center gap-1`}
+                aria-haspopup="menu"
+                aria-expanded={moreMenuOpen}
+              >
+                More
+                <span className="text-xs">{moreMenuOpen ? '▲' : '▼'}</span>
+              </button>
+              {moreMenuOpen && (
+                <div className={`absolute right-0 mt-2 w-44 rounded-xl border ${dropdownBg} shadow-xl py-1 z-50`}>
+                  {moreLinks.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => setMoreMenuOpen(false)}
+                      className={dropdownLinkClass}
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
             {session && (
-              <button onClick={() => signOut()} className="text-red-600 hover:text-red-800">Logout</button>
+              <button onClick={() => signOut()} className="text-red-400 hover:text-red-300 transition">Logout</button>
             )}
           </div>
 
           {/* Cart & Mobile Button */}
           <div className="flex items-center space-x-4">
-            <Link href="/cart" className="relative">
-              <svg className="w-6 h-6 text-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button
+              onClick={openCart}
+              className={`relative ${cartColor} transition`}
+              aria-label="Open cart"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-1.5 6M17 13l1.5 6M9 21h6M12 18v3" />
               </svg>
               {totalItems > 0 && (
-                <span className="absolute -top-2 -right-2 bg-secondary text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                <span className={`absolute -top-2 -right-2 ${badgeBg} text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold`}>
                   {totalItems}
                 </span>
               )}
-            </Link>
+            </button>
             <button
-              className="md:hidden p-2 rounded-md focus:outline-none"
+              className={`md:hidden p-2 rounded-md focus:outline-none ${hamburgerColor}`}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -72,29 +135,45 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Modern Mobile Menu - Full screen overlay */}
+      {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-white md:hidden">
-          <div className="flex flex-col items-center justify-center h-full space-y-8 text-xl">
-            {navLinks.map(link => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="text-dark hover:text-primary transition"
-              >
-                {link.label}
-              </Link>
-            ))}
+        <div className={`fixed inset-0 z-40 ${mobileOverlay} md:hidden`}>
+          <div className="flex flex-col items-center justify-center h-full px-6">
+            <div className="grid grid-cols-2 gap-3 w-full max-w-sm">
+              {primaryLinks.map(link => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`rounded-xl border border-white/10 px-4 py-3 text-center text-base font-semibold ${mobileLinkClass}`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+            <div className="w-full max-w-sm mt-6 space-y-3">
+              {moreLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`block text-center rounded-lg px-4 py-2.5 text-base ${mobileLinkClass}`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
             {session && (
-              <button onClick={() => signOut()} className="text-red-600 hover:text-red-800">Logout</button>
+              <button onClick={() => signOut()} className="text-red-400 hover:text-red-300 mt-6">Logout</button>
             )}
-            <Link href="/cart" onClick={() => setMobileMenuOpen(false)} className="text-dark hover:text-primary">
+            <Link href="/cart" onClick={() => setMobileMenuOpen(false)} className={`${mobileLinkClass} mt-5`}>
               Cart ({totalItems})
             </Link>
           </div>
         </div>
       )}
     </nav>
+    <CartDrawer />
+  </>
   );
 }

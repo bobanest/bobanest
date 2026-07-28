@@ -2,8 +2,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const STARS = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
-
 function isModifierApplicable(group, productId) {
   if (!group) return false;
   const applicable = Array.isArray(group.applicableProducts) ? group.applicableProducts : [];
@@ -155,149 +153,209 @@ export default function ProductModal({ product, onClose, onAddToCart, modifierGr
 
   if (loadingModifiers) {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6">Loading options...</div>
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div className="bg-[#2a1812] border border-white/10 rounded-2xl p-8 flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-3 border-[#e8a33d] border-t-transparent rounded-full animate-spin" />
+          <p className="text-[#b89070] text-sm font-medium">Loading options…</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <h2 className="text-2xl font-bold mb-1">{product.name}</h2>
-          {avgRating && (
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-yellow-500 text-sm">{STARS(Math.round(avgRating))}</span>
-              <span className="text-sm text-gray-500">{avgRating} ({reviews.length} review{reviews.length !== 1 ? 's' : ''})</span>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-[#1a0f0c] border border-white/10 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg max-h-[92vh] flex flex-col shadow-2xl">
+
+        {/* Drag handle (mobile) */}
+        <div className="flex justify-center pt-3 sm:hidden flex-shrink-0">
+          <div className="w-10 h-1 bg-white/20 rounded-full" />
+        </div>
+
+        {/* Product header */}
+        <div className="px-6 pt-4 pb-3 flex gap-4 items-start flex-shrink-0 border-b border-white/8">
+          {product.imageUrl && (
+            <div className="w-20 h-20 flex-shrink-0 rounded-2xl bg-[#2a1812] overflow-hidden flex items-center justify-center">
+              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-contain" />
             </div>
           )}
-          <p className="text-gray-600 mb-4">{product.description}</p>
-
-          {modifiers.length === 0 && !loadingModifiers && (
-            <p className="text-gray-500 mb-4">{modifierError || 'No options to customize.'}</p>
-          )}
-
-          {modifiers.map(group => (
-            <div key={group._id} className="mb-4 border-b pb-3">
-              <p className="font-semibold">
-                {group.name} {group.required && <span className="text-red-500">*</span>}
-              </p>
-              <div className="mt-2 space-y-2">
-                {group.options.map(opt => (
-                  <label key={opt._id} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type={group.multiple ? 'checkbox' : 'radio'}
-                      name={group._id}
-                      checked={
-                        group.multiple
-                          ? (selectedOptions[group._id] || []).includes(opt._id)
-                          : selectedOptions[group._id] === opt._id
-                      }
-                      onChange={() => handleOptionChange(group._id, opt._id, group.multiple)}
-                      className="w-4 h-4"
-                    />
-                    <span>{opt.name}</span>
-                    {opt.price > 0 && <span className="text-sm text-gray-500">(+${opt.price})</span>}
-                  </label>
-                ))}
+          <div className="flex-1 min-w-0 pt-1">
+            <h2 className="text-xl font-extrabold text-[#f5e6c8] leading-tight">{product.name}</h2>
+            {avgRating && (
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-[#e8a33d] text-xs">{'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5 - Math.round(avgRating))}</span>
+                <span className="text-xs text-[#6b4e37]">{avgRating} ({reviews.length})</span>
               </div>
-            </div>
-          ))}
-
-          <div className="mt-4 pt-4 border-t">
-            <p className="text-xl font-bold">Total: ${totalPrice.toFixed(2)}</p>
+            )}
+            {product.description && (
+              <p className="text-[#b89070] text-xs mt-1 leading-relaxed line-clamp-2">{product.description}</p>
+            )}
           </div>
+          <button onClick={onClose} aria-label="Close" className="text-[#6b4e37] hover:text-[#f5e6c8] transition p-1 flex-shrink-0 -mt-1">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-          <div className="flex gap-3 mt-6">
+        {/* Scrollable customize area */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          {/* Customization label */}
+          {modifiers.length > 0 && (
+            <p className="text-[#e8a33d] text-xs font-extrabold uppercase tracking-widest">Customize Your Drink</p>
+          )}
+
+          {modifierError && (
+            <div className="bg-[#2a1812] border border-white/8 rounded-xl p-3 text-[#b89070] text-sm">{modifierError}</div>
+          )}
+
+          {modifiers.map(group => {
+            const isSelected = (optId) => group.multiple
+              ? (selectedOptions[group._id] || []).includes(optId)
+              : selectedOptions[group._id] === optId;
+
+            return (
+              <div key={group._id}>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[#f5e6c8] font-bold text-sm">
+                    {group.name}
+                    {group.required && <span className="text-red-400 ml-1">*</span>}
+                  </p>
+                  {group.multiple && (
+                    <span className="text-[#6b4e37] text-xs">Select all that apply</span>
+                  )}
+                  {!group.multiple && !group.required && (
+                    <span className="text-[#6b4e37] text-xs">Optional</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {group.options.map(opt => (
+                    <button
+                      key={opt._id}
+                      type="button"
+                      onClick={() => handleOptionChange(group._id, opt._id, group.multiple)}
+                      className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-150 ${
+                        isSelected(opt._id)
+                          ? 'bg-[#e8a33d] text-[#1a0f0c] border-[#e8a33d] shadow-md scale-105'
+                          : 'bg-[#2a1812] text-[#b89070] border-white/10 hover:border-[#e8a33d]/40 hover:text-[#f5e6c8]'
+                      }`}
+                    >
+                      {opt.name}
+                      {opt.price > 0 && (
+                        <span className={`ml-1.5 text-xs ${isSelected(opt._id) ? 'text-[#1a0f0c]/70' : 'text-[#6b4e37]'}`}>
+                          +${opt.price.toFixed(2)}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Reviews toggle */}
+          {reviews.length > 0 && (
+            <div className="border-t border-white/8 pt-4">
+              <button
+                onClick={() => setShowReviews(v => !v)}
+                className="flex items-center gap-2 text-sm font-semibold text-[#b89070] hover:text-[#e8a33d] transition"
+              >
+                <span className="text-[#e8a33d]">{'★'.repeat(Math.round(avgRating || 0))}</span>
+                Reviews ({reviews.length})
+                <span className="text-xs">{showReviews ? '▲' : '▼'}</span>
+              </button>
+              {showReviews && (
+                <div className="mt-3 space-y-2 max-h-40 overflow-y-auto">
+                  {reviews.map(r => (
+                    <div key={r._id} className="bg-[#2a1812] rounded-xl p-3 border border-white/8">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[#e8a33d] text-xs">{'★'.repeat(r.rating)}</span>
+                        <span className="text-xs font-medium text-[#d4b896]">{r.customerName || 'Anonymous'}</span>
+                      </div>
+                      <p className="text-xs text-[#b89070] leading-relaxed">{r.comment}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Leave a review */}
+          <div className="border-t border-white/8 pt-4">
             <button
-              onClick={handleAddToCart}
-              disabled={!isMandatoryFulfilled()}
-              className="flex-1 bg-primary text-white py-2 rounded-lg hover:bg-secondary transition disabled:opacity-50"
+              onClick={() => setShowReviews(v => !v)}
+              className="text-xs text-[#6b4e37] hover:text-[#e8a33d] transition"
             >
-              Add to Cart
+              {avgRating ? 'Write a review ↓' : '⭐ Be the first to review!'}
             </button>
+            {showReviews && (
+              <form onSubmit={handleReviewSubmit} className="mt-3 bg-[#2a1812] rounded-2xl p-4 space-y-3 border border-white/8">
+                <p className="text-sm font-bold text-[#f5e6c8]">Leave a Review</p>
+                <input
+                  type="text"
+                  placeholder="Your name"
+                  value={reviewForm.name}
+                  onChange={e => setReviewForm(f => ({ ...f, name: e.target.value }))}
+                  required
+                  className="w-full bg-[#150d09] border border-white/10 text-[#f5e6c8] placeholder-[#6b4e37] rounded-xl p-3 text-sm focus:outline-none focus:border-[#e8a33d]/50"
+                />
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-[#b89070]">Rating:</span>
+                  <div className="flex gap-1">
+                    {[1,2,3,4,5].map(n => (
+                      <button key={n} type="button" onClick={() => setReviewForm(f => ({ ...f, rating: n }))}
+                        className={`text-xl transition ${n <= reviewForm.rating ? 'text-[#e8a33d]' : 'text-[#3a2518]'}`}>
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <textarea
+                  placeholder="Share your thoughts…"
+                  value={reviewForm.comment}
+                  onChange={e => setReviewForm(f => ({ ...f, comment: e.target.value }))}
+                  required
+                  rows={3}
+                  className="w-full bg-[#150d09] border border-white/10 text-[#f5e6c8] placeholder-[#6b4e37] rounded-xl p-3 text-sm focus:outline-none focus:border-[#e8a33d]/50 resize-none"
+                />
+                {reviewMsg && (
+                  <p className={`text-xs ${reviewMsg.includes('submitted') ? 'text-green-400' : 'text-red-400'}`}>{reviewMsg}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={submittingReview}
+                  className="w-full bg-[#e8a33d] text-[#1a0f0c] font-bold py-2.5 rounded-xl text-sm hover:bg-amber-400 transition disabled:opacity-50"
+                >
+                  {submittingReview ? 'Submitting…' : 'Submit Review'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+
+        {/* Sticky bottom — price + add to cart */}
+        <div className="px-6 py-5 border-t border-white/10 bg-[#150d09] flex-shrink-0">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-[#b89070] font-semibold text-sm">Total</span>
+            <span className="text-[#e8a33d] font-extrabold text-2xl">${totalPrice.toFixed(2)}</span>
+          </div>
+          <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 bg-gray-200 text-dark py-2 rounded-lg hover:bg-gray-300 transition"
+              className="px-5 py-3.5 rounded-2xl border border-white/15 text-[#b89070] font-semibold hover:border-white/30 hover:text-[#f5e6c8] transition"
             >
               Cancel
             </button>
-          </div>
-
-          {/* Reviews section */}
-          <div className="mt-6 border-t pt-4">
             <button
-              onClick={() => setShowReviews(v => !v)}
-              className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-primary transition"
+              onClick={handleAddToCart}
+              disabled={!isMandatoryFulfilled()}
+              className="flex-1 bg-[#e8a33d] text-[#1a0f0c] font-extrabold py-3.5 rounded-2xl hover:bg-amber-400 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
             >
-              <span>{showReviews ? '▲' : '▼'}</span>
-              Reviews{reviews.length > 0 ? ` (${reviews.length})` : ''}
-              {!avgRating && <span className="text-gray-400 font-normal">— Be the first to review!</span>}
+              Add to Cart
             </button>
-
-            {showReviews && (
-              <div className="mt-4 space-y-4">
-                {reviews.length > 0 && (
-                  <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-                    {reviews.map(r => (
-                      <div key={r._id} className="bg-gray-50 rounded-lg p-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-yellow-500 text-sm">{STARS(r.rating)}</span>
-                          <span className="text-xs font-medium text-gray-700">{r.customerName || 'Anonymous'}</span>
-                        </div>
-                        <p className="text-sm text-gray-600">{r.comment}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <form onSubmit={handleReviewSubmit} className="bg-gray-50 rounded-lg p-4 space-y-3">
-                  <p className="text-sm font-semibold text-gray-700">Leave a Review</p>
-                  <input
-                    type="text"
-                    placeholder="Your name"
-                    value={reviewForm.name}
-                    onChange={e => setReviewForm(f => ({ ...f, name: e.target.value }))}
-                    required
-                    className="w-full border rounded p-2 text-sm"
-                  />
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-600">Rating:</label>
-                    <select
-                      value={reviewForm.rating}
-                      onChange={e => setReviewForm(f => ({ ...f, rating: Number(e.target.value) }))}
-                      className="border rounded p-1 text-sm"
-                    >
-                      {[5, 4, 3, 2, 1].map(n => (
-                        <option key={n} value={n}>{STARS(n)}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <textarea
-                    placeholder="Share your thoughts..."
-                    value={reviewForm.comment}
-                    onChange={e => setReviewForm(f => ({ ...f, comment: e.target.value }))}
-                    required
-                    rows={3}
-                    className="w-full border rounded p-2 text-sm resize-none"
-                  />
-                  {reviewMsg && (
-                    <p className={`text-xs ${reviewMsg.includes('submitted') ? 'text-green-600' : 'text-red-500'}`}>
-                      {reviewMsg}
-                    </p>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={submittingReview}
-                    className="w-full bg-primary text-white py-2 rounded text-sm hover:bg-secondary transition disabled:opacity-50"
-                  >
-                    {submittingReview ? 'Submitting...' : 'Submit Review'}
-                  </button>
-                </form>
-              </div>
-            )}
           </div>
+          {!isMandatoryFulfilled() && (
+            <p className="text-center text-[#6b4e37] text-xs mt-2">Please select all required options (*)</p>
+          )}
         </div>
       </div>
     </div>

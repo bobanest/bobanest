@@ -6,10 +6,13 @@ import Head from 'next/head';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 
-export default function Layout({ children, title = 'Bobanest – Best Bubble Tea' }) {
+export default function Layout({ children, title = 'Bobanest – Best Bubble Tea', dark = false }) {
   const [fbSettings, setFbSettings] = useState({ pixelId: '', enabled: false });
   const router = useRouter();
   const isHomePage = router.pathname === '/';
+  const isAdminRoute = router.pathname.startsWith('/admin');
+  const isEmployeeRoute = router.pathname.startsWith('/employee');
+  const useDarkTheme = dark || (!isAdminRoute && !isEmployeeRoute);
 
   useEffect(() => {
     // Load Facebook tracking settings
@@ -28,11 +31,11 @@ export default function Layout({ children, title = 'Bobanest – Best Bubble Tea
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <FacebookPixel pixelId={fbSettings.pixelId} enabled={fbSettings.enabled} />
-      <div className="flex flex-col min-h-screen">
+      <div className={`flex flex-col min-h-screen ${useDarkTheme ? 'bg-[#1a0f0c]' : ''}`}>
         {isHomePage && <LiveScoreTicker />}
-        <Navbar />
+        <Navbar dark={useDarkTheme} />
         <main className="flex-grow">{children}</main>
-        <Footer />
+        <Footer dark={useDarkTheme} />
       </div>
     </>
   );

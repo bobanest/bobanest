@@ -8,6 +8,9 @@ export function CartProvider({ children }) {
   const [cartItems, setCartItems] = useState([]);
   const [promotions, setPromotions] = useState([]);
   const [promotionsLoaded, setPromotionsLoaded] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+  const openCart = () => setCartOpen(true);
+  const closeCart = () => setCartOpen(false);
 
   // Fetch promotions once at startup
   useEffect(() => {
@@ -202,6 +205,9 @@ export function CartProvider({ children }) {
       cartItems,
       totalItems,
       totalPrice,
+      cartOpen,
+      openCart,
+      closeCart,
       addToCart,
       removeFromCart,
       updateQuantity,
@@ -219,6 +225,9 @@ export function useCart() {
       cartItems: [],
       totalItems: 0,
       totalPrice: 0,
+      cartOpen: false,
+      openCart: () => {},
+      closeCart: () => {},
       addToCart: () => {},
       removeFromCart: () => {},
       updateQuantity: () => {},
