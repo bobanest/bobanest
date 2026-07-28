@@ -70,16 +70,20 @@ function NewsletterSection() {
 }
 
 export default function Home() {
-	const [heroData, setHeroData] = useState({
+	const fallbackHero = {
 		imageUrl: '/hero-default.jpg',
 		title: 'Fresh Bubble Tea Delivered to You',
 		subtitle: 'Handcrafted with premium ingredients. Order online for pickup or delivery.',
+	};
+	const [heroData, setHeroData] = useState({
+		...fallbackHero,
 	});
 	const [allProducts, setAllProducts] = useState([]);
 	const [categories, setCategories] = useState([]);
 	const [promotions, setPromotions] = useState([]);
 	const [modalProduct, setModalProduct] = useState(null);
-	const [loading, setLoading] = useState(true);
+	const [modifierGroups, setModifierGroups] = useState([]);
+	const [loadingData, setLoadingData] = useState(false);
 	const { addToCart } = useCart();
 	const [showQuickActionBar, setShowQuickActionBar] = useState(false);
 	const [activeDescriptionProductId, setActiveDescriptionProductId] = useState(null);
@@ -96,20 +100,52 @@ export default function Home() {
 		}, DESCRIPTION_VISIBLE_MS);
 	};
 
-	// Fetch all data in parallel (no race condition)
+	// Fetch all data in parallel with timeout so homepage never blocks forever.
 	useEffect(() => {
-		Promise.all([
-			fetch('/api/admin/hero').then(res => res.json()).catch(() => ({})),
-			fetch('/api/admin/products').then(res => res.json()).catch(() => []),
-			fetch('/api/admin/promotions?active=true').then(res => res.json()).catch(() => [])
-		]).then(([hero, products, promos]) => {
-			setHeroData(hero);
-			setAllProducts(products);
-			setPromotions(promos);
-			const uniqueCategories = [...new Set(products.map(p => p.category))];
-			setCategories(uniqueCategories);
-			setLoading(false);
-		});
+		const fetchJsonWithTimeout = async (url, fallback, timeoutMs = 6000) => {
+			const controller = new AbortController();
+			const timeout = setTimeout(() => controller.abort(), timeoutMs);
+			try {
+				const res = await fetch(url, { signal: controller.signal });
+				if (!res.ok) return fallback;
+				return await res.json();
+			} catch {
+				return fallback;
+			} finally {
+				clearTimeout(timeout);
+			}
+		};
+
+		let cancelled = false;
+		const load = async () => {
+			setLoadingData(true);
+			const [hero, products, promos, modifiers] = await Promise.all([
+				fetchJsonWithTimeout('/api/admin/hero', {}),
+				fetchJsonWithTimeout('/api/admin/products', []),
+				fetchJsonWithTimeout('/api/admin/promotions?active=true', []),
+					fetchJsonWithTimeout('/api/admin/modifiers', []),
+				]);
+				if (cancelled) return;
+
+				const safeProducts = Array.isArray(products) ? products : [];
+				const safePromos = Array.isArray(promos) ? promos : [];
+				const safeHero = hero && typeof hero === 'object' ? hero : {};
+				setHeroData({
+					imageUrl: safeHero.imageUrl || fallbackHero.imageUrl,
+					title: safeHero.title || fallbackHero.title,
+					subtitle: safeHero.subtitle || fallbackHero.subtitle,
+				});
+				setAllProducts(safeProducts);
+				setPromotions(safePromos);
+				setModifierGroups(Array.isArray(modifiers) ? modifiers : []);
+				setCategories([...new Set(safeProducts.map((p) => p.category))]);
+				setLoadingData(false);
+		};
+
+		load();
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	// Helper: get promotion badge for a product
@@ -201,18 +237,13 @@ export default function Home() {
 		setModalProduct(null);
 	};
 
-	if (loading) {
-		return (
-			<Layout>
-				<div className="flex justify-center items-center h-screen">
-					<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-				</div>
-			</Layout>
-		);
-	}
-
 	return (
 		<Layout>
+			{loadingData && (
+				<div className="bg-amber-50 border-b border-amber-200 text-amber-700 text-xs text-center py-1">
+					Refreshing menu content...
+				</div>
+			)}
 			{showQuickActionBar && (
 				<div className="fixed top-16 left-0 right-0 z-40 bg-white/95 backdrop-blur border-b border-orange-100 shadow-sm">
 					<div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-center gap-2 md:gap-3">
@@ -580,10 +611,11 @@ export default function Home() {
 			{modalProduct && (
 				<ProductModal
 					product={modalProduct}
-					onClose={() => setModalProduct(null)}
-					onAddToCart={handleAddToCart}
-				/>
-			)}
+						modifierGroups={modifierGroups}
+						onClose={() => setModalProduct(null)}
+						onAddToCart={handleAddToCart}
+					/>
+				)}
 		</Layout>
 	);
 }
