@@ -1,5 +1,6 @@
 import dbConnect from '@/lib/dbConnect';
 import ModifierGroup from '@/lib/models/Modifier';
+import Product from '@/lib/models/Product';
 
 export default async function handler(req, res) {
   await dbConnect();

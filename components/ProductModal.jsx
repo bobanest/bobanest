@@ -16,6 +16,7 @@ export default function ProductModal({ product, onClose, onAddToCart, modifierGr
   const [modifiers, setModifiers] = useState(() => modifierGroups.filter((group) => isModifierApplicable(group, product._id)));
   const [selectedOptions, setSelectedOptions] = useState({});
   const [loadingModifiers, setLoadingModifiers] = useState(false);
+  const [modifierError, setModifierError] = useState('');
   const [totalPrice, setTotalPrice] = useState(product.price);
   const [reviews, setReviews] = useState([]);
   const [showReviews, setShowReviews] = useState(false);
@@ -33,6 +34,7 @@ export default function ProductModal({ product, onClose, onAddToCart, modifierGr
     const localApplicable = modifierGroups.filter((group) => isModifierApplicable(group, product._id));
     setModifiers(localApplicable);
     setSelectedOptions({});
+    setModifierError('');
 
     if (localApplicable.length > 0 || modifierGroups.length > 0) {
       setLoadingModifiers(false);
@@ -42,12 +44,17 @@ export default function ProductModal({ product, onClose, onAddToCart, modifierGr
     const fetchModifiers = async () => {
       setLoadingModifiers(true);
       try {
-        const res = await axios.get('/api/admin/modifiers');
+        const res = await axios.get('/api/admin/modifiers', { timeout: 8000 });
         const allGroups = Array.isArray(res.data) ? res.data : [];
-        setModifiers(allGroups.filter((group) => isModifierApplicable(group, product._id)));
+        const applicableGroups = allGroups.filter((group) => isModifierApplicable(group, product._id));
+        setModifiers(applicableGroups);
+        if (applicableGroups.length === 0) {
+          setModifierError('No customization options are available for this item right now.');
+        }
       } catch (err) {
         console.error('Failed to load modifiers', err);
         setModifiers([]);
+        setModifierError('We could not load customization options right now. You can still add this item to the cart.');
       } finally {
         setLoadingModifiers(false);
       }
@@ -168,7 +175,7 @@ export default function ProductModal({ product, onClose, onAddToCart, modifierGr
           <p className="text-gray-600 mb-4">{product.description}</p>
 
           {modifiers.length === 0 && !loadingModifiers && (
-            <p className="text-gray-500 mb-4">No options to customize.</p>
+            <p className="text-gray-500 mb-4">{modifierError || 'No options to customize.'}</p>
           )}
 
           {modifiers.map(group => (
