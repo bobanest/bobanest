@@ -6,6 +6,43 @@ import { useCart } from '@/components/CartContext';
 import ProductModal from '@/components/ProductModal';
 
 const DESCRIPTION_VISIBLE_MS = 4000;
+const STATIC_GOOGLE_REVIEWS = [
+	{
+		author_name: 'Destiny R.',
+		rating: 5,
+		text: 'Absolutely love Bobanest! The taro milk tea is perfectly sweet and the boba is always fresh. My go-to spot in Zephyrhills!',
+		relative_time_description: '2 weeks ago',
+		profile_photo_url: null,
+	},
+	{
+		author_name: 'Marcus T.',
+		rating: 5,
+		text: 'Best bubble tea I have had! The custom fruit tea builder is amazing — I made a strawberry-mango combo with popping boba and it was incredible.',
+		relative_time_description: '1 month ago',
+		profile_photo_url: null,
+	},
+	{
+		author_name: 'Priya L.',
+		rating: 5,
+		text: 'Super friendly staff and the drinks are always consistent. The brown sugar milk tea is out of this world. Highly recommend!',
+		relative_time_description: '3 weeks ago',
+		profile_photo_url: null,
+	},
+	{
+		author_name: 'Jonathan M.',
+		rating: 5,
+		text: 'Online ordering is so easy and the drinks were ready right on time. This place has become our family Friday treat!',
+		relative_time_description: '1 month ago',
+		profile_photo_url: null,
+	},
+	{
+		author_name: 'Samantha K.',
+		rating: 5,
+		text: 'Love the rewards program — I have already redeemed points twice! Great flavors and the staff always make it with so much care.',
+		relative_time_description: '2 months ago',
+		profile_photo_url: null,
+	},
+];
 
 // ── Newsletter Section ────────────────────────────────────────────
 function NewsletterSection() {
@@ -96,7 +133,6 @@ export default function Home() {
 	};
 	const [heroData, setHeroData] = useState({ ...fallbackHero });
 	const [allProducts, setAllProducts] = useState([]);
-	const [categories, setCategories] = useState([]);
 	const [promotions, setPromotions] = useState([]);
 	const [modifierGroups, setModifierGroups] = useState([]);
 	const [modalProduct, setModalProduct] = useState(null);
@@ -105,10 +141,15 @@ export default function Home() {
 	const [showQuickActionBar, setShowQuickActionBar] = useState(false);
 	const [activeDescriptionProductId, setActiveDescriptionProductId] = useState(null);
 	const [activeMenuTab, setActiveMenuTab] = useState('All');
-	const [googleReviews, setGoogleReviews] = useState([]);
-	const [googleRating, setGoogleRating] = useState(null);
-	const [googleTotal, setGoogleTotal] = useState(null);
 	const descriptionTimeoutRef = useRef(null);
+	const normalizeMenuCategory = (category) => {
+		const normalized = String(category || '').toLowerCase().trim();
+		if (normalized.includes('milk')) return 'Milk Tea';
+		if (normalized.includes('fruit')) return 'Fruit Tea';
+		if (normalized.includes('signature') || normalized.includes('specialty') || normalized.includes('special')) return 'Signature';
+		if (normalized.includes('smooth')) return 'Smoothie';
+		return '';
+	};
 
 	const showDescription = (productId) => {
 		setActiveDescriptionProductId(productId);
@@ -159,18 +200,9 @@ export default function Home() {
 			setAllProducts(safeProducts);
 			setPromotions(safePromos);
 			setModifierGroups(Array.isArray(modifiers) ? modifiers : []);
-			setCategories([...new Set(safeProducts.map((p) => p.category))]);
 			setLoadingData(false);
 		};
 		load();
-		// Load Google reviews separately so it doesn't block main content
-		fetchJsonWithTimeout('/api/google-reviews', {}).then(data => {
-			if (data && Array.isArray(data.reviews)) {
-				setGoogleReviews(data.reviews);
-				setGoogleRating(data.rating);
-				setGoogleTotal(data.total);
-			}
-		});
 		return () => { cancelled = true; };
 	}, []);
 
@@ -220,15 +252,10 @@ export default function Home() {
 		promotionGroups[title] = promotionGroups[title].filter((v, i, a) => a.findIndex(t => t._id === v._id) === i);
 	});
 
-	const groupedProducts = categories.map(cat => ({
-		category: cat,
-		items: allProducts.filter(p => p.category === cat),
-	}));
-
 	const MENU_TABS = ['All', 'Milk Tea', 'Fruit Tea', 'Signature', 'Smoothie'];
 	const menuTabItems = activeMenuTab === 'All'
 		? allProducts
-		: allProducts.filter(p => p.category === activeMenuTab);
+		: allProducts.filter(p => normalizeMenuCategory(p.category) === activeMenuTab);
 
 	const bestSellers = useMemo(() => {
 		const priority = { 'Milk Tea': 1, 'Fruit Tea': 2, 'Specialty': 3, 'Smoothie': 4 };
@@ -384,14 +411,10 @@ export default function Home() {
 				</section>
 			))}
 
-			{/* ── Menu Highlights with Tabs ── */}
+			{/* ── Menu Section with Tabs ── */}
 			<section className="bg-[#150d09] py-12 border-t border-white/5">
 				<div className="max-w-7xl mx-auto px-4">
-					<div className="flex items-end justify-between gap-4 mb-6">
-						<div>
-							<p className="text-[#e8a33d] text-xs font-extrabold uppercase tracking-widest mb-1">Browse</p>
-							<h2 className="text-3xl font-extrabold text-[#f5e6c8]">Menu Highlights</h2>
-						</div>
+					<div className="flex justify-end gap-4 mb-6">
 						<Link href="/products" className="border border-[#e8a33d]/40 text-[#e8a33d] px-5 py-2 rounded-full text-sm font-bold hover:bg-[#e8a33d]/10 transition">
 							View Full Menu
 						</Link>
@@ -412,7 +435,7 @@ export default function Home() {
 					</div>
 
 					<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-						{menuTabItems.slice(0, 10).map(product => (
+						{menuTabItems.map(product => (
 							<DarkProductCard
 								key={product._id}
 								product={product}
@@ -424,7 +447,7 @@ export default function Home() {
 							/>
 						))}
 					</div>
-					{allProducts.length === 0 && (
+					{menuTabItems.length === 0 && (
 						<p className="text-center text-[#6b4e37] py-12">No products available yet.</p>
 					)}
 				</div>
@@ -506,16 +529,13 @@ export default function Home() {
 						Google Reviews
 					</div>
 					<h2 className="text-3xl font-extrabold text-[#f5e6c8] mb-2">What Our Customers Say</h2>
-					{googleRating && (
-						<div className="flex items-center justify-center gap-2 mb-8">
-							<span className="text-[#e8a33d] text-2xl font-extrabold">{googleRating}</span>
-							<span className="text-[#e8a33d] text-xl">{'★'.repeat(Math.round(googleRating))}{'☆'.repeat(5 - Math.round(googleRating))}</span>
-							{googleTotal && <span className="text-[#6b4e37] text-sm">({googleTotal} reviews on Google)</span>}
-						</div>
-					)}
-					{!googleRating && <div className="mb-8" />}
+					<div className="flex items-center justify-center gap-2 mb-8">
+						<span className="text-[#e8a33d] text-2xl font-extrabold">4.9</span>
+						<span className="text-[#e8a33d] text-xl">★★★★★</span>
+						<span className="text-[#6b4e37] text-sm">(Google reviews)</span>
+					</div>
 					<div className="grid md:grid-cols-3 gap-5 max-w-4xl mx-auto">
-						{googleReviews.slice(0, 6).map((r, idx) => (
+						{STATIC_GOOGLE_REVIEWS.slice(0, 6).map((r, idx) => (
 							<div key={idx} className="bg-[#2a1812] border border-white/8 rounded-2xl p-5 text-left flex flex-col gap-2 hover:border-white/15 transition">
 								<div className="flex items-center gap-3">
 									{r.profile_photo_url ? (

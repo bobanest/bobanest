@@ -53,6 +53,17 @@ export default function Navbar({ dark = false }) {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
   return (
     <>
     <nav className={base}>
@@ -137,38 +148,60 @@ export default function Navbar({ dark = false }) {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className={`fixed inset-0 z-40 ${mobileOverlay} md:hidden`}>
-          <div className="flex flex-col items-center justify-center h-full px-6">
-            <div className="grid grid-cols-2 gap-3 w-full max-w-sm">
-              {primaryLinks.map(link => (
+        <div className={`fixed inset-0 z-[100] md:hidden ${mobileOverlay}`}>
+          <div className="h-16 px-4 border-b border-white/10 flex items-center justify-between">
+            <span className={`text-lg font-bold ${logoText}`}>Menu</span>
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className={`p-2 rounded-md ${hamburgerColor}`}
+              aria-label="Close menu"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="h-[calc(100vh-4rem)] overflow-y-auto px-4 py-5">
+            <div className="space-y-2">
+              {primaryLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`rounded-xl border border-white/10 px-4 py-3 text-center text-base font-semibold ${mobileLinkClass}`}
+                  className={`block rounded-xl border border-white/10 px-4 py-3 text-base font-semibold ${mobileLinkClass}`}
                 >
                   {link.label}
                 </Link>
               ))}
             </div>
-            <div className="w-full max-w-sm mt-6 space-y-3">
+            <div className="mt-6 mb-2 text-xs uppercase tracking-widest text-[#6b4e37] font-bold">More</div>
+            <div className="space-y-2">
               {moreLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`block text-center rounded-lg px-4 py-2.5 text-base ${mobileLinkClass}`}
+                  className={`block rounded-xl border border-white/10 px-4 py-3 text-base ${mobileLinkClass}`}
                 >
                   {link.label}
                 </Link>
               ))}
             </div>
-            {session && (
-              <button onClick={() => signOut()} className="text-red-400 hover:text-red-300 mt-6">Logout</button>
-            )}
-            <Link href="/cart" onClick={() => setMobileMenuOpen(false)} className={`${mobileLinkClass} mt-5`}>
+            <Link
+              href="/cart"
+              onClick={() => setMobileMenuOpen(false)}
+              className={`block rounded-xl border border-white/10 px-4 py-3 text-base font-semibold mt-6 ${mobileLinkClass}`}
+            >
               Cart ({totalItems})
             </Link>
+            {session && (
+              <button
+                onClick={() => signOut()}
+                className="text-red-400 hover:text-red-300 mt-6 w-full text-left px-1 py-2"
+              >
+                Logout
+              </button>
+            )}
           </div>
         </div>
       )}
