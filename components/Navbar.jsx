@@ -26,7 +26,7 @@ export default function Navbar({ dark = false }) {
   ];
 
   const base = dark
-    ? 'bg-[#120a07]/95 backdrop-blur border-b border-white/8 sticky top-0 z-50'
+    ? `${mobileMenuOpen ? 'bg-[#120a07]' : 'bg-[#120a07]/95 backdrop-blur'} border-b border-white/8 sticky top-0 z-50`
     : 'bg-white shadow-md sticky top-0 z-50';
   const logoText = dark ? 'text-[#e8a33d]' : 'text-primary';
   const linkClass = dark
@@ -148,7 +148,10 @@ export default function Navbar({ dark = false }) {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className={`fixed inset-0 z-[100] md:hidden ${mobileOverlay}`}>
+        <div
+          className="fixed inset-0 z-[100] md:hidden opacity-100"
+          style={{ backgroundColor: dark ? '#120a07' : '#ffffff' }}
+        >
           <div className="h-16 px-4 border-b border-white/10 flex items-center justify-between">
             <span className={`text-lg font-bold ${logoText}`}>Menu</span>
             <button
