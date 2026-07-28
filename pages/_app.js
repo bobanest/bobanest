@@ -38,15 +38,19 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
   const router = useRouter();
 
   useEffect(() => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    const hasServiceWorker = typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+    const hasPushManager = typeof window !== 'undefined' && 'PushManager' in window;
+    const hasNotification = typeof window !== 'undefined' && 'Notification' in window;
+    if (!hasServiceWorker || !hasPushManager || !hasNotification) return;
+
     navigator.serviceWorker.register('/sw.js').then(async (registration) => {
-      const permission = Notification.permission;
+      const permission = window.Notification.permission;
       if (permission === 'granted') {
         await subscribeToPush(registration);
-      } else if (permission === 'default') {
+      } else if (permission === 'default' && typeof window.Notification.requestPermission === 'function') {
         // Ask once, non-intrusively — only after a short delay
         setTimeout(async () => {
-          const result = await Notification.requestPermission();
+          const result = await window.Notification.requestPermission();
           if (result === 'granted') {
             await subscribeToPush(registration);
           }
