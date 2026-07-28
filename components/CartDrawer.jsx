@@ -137,7 +137,7 @@ export default function CartDrawer() {
               <span className="text-[#f5e6c8] font-extrabold text-xl">${totalPrice.toFixed(2)}</span>
             </div>
             <Link
-              href="/checkout"
+              href="/cart"
               onClick={closeCart}
               className="flex items-center justify-center gap-2 w-full bg-[#e8a33d] text-[#1a0f0c] font-extrabold py-4 rounded-2xl text-base hover:bg-amber-400 active:scale-[0.98] transition shadow-lg"
             >
