@@ -32,6 +32,7 @@ export default async function handler(req, res) {
       })
     ).min(1).required(),
     orderType: yup.string().oneOf(['pickup', 'delivery']).optional(),
+    pickupLocation: yup.string().optional().nullable(),
     deliveryAddress: yup.string().optional().nullable(),
     appliedPromotions: yup.array().of(
       yup.object({
@@ -56,6 +57,7 @@ export default async function handler(req, res) {
     const {
       items,
       orderType = 'pickup',
+      pickupLocation,
       deliveryAddress,
       appliedPromotions,
       customerEmail,
@@ -98,7 +100,11 @@ export default async function handler(req, res) {
     }
 
     const isDelivery = orderType === 'delivery';
+    const safePickupLocation = orderType === 'pickup' ? String(pickupLocation || '').trim() : '';
     const safeDeliveryAddress = isDelivery ? String(deliveryAddress || '').trim() : '';
+    if (orderType === 'pickup' && !safePickupLocation) {
+      return res.status(400).json({ error: 'Pickup location is required for pickup orders.' });
+    }
     if (isDelivery && !safeDeliveryAddress) {
       return res.status(400).json({ error: 'Delivery address is required for delivery orders.' });
     }
@@ -155,6 +161,7 @@ export default async function handler(req, res) {
       totalAmount: provisionalTotal, // store provisional total
       status: 'pending',
       orderType,
+      pickupLocation: safePickupLocation,
       deliveryAddress: safeDeliveryAddress,
       scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
       trackingNumber,

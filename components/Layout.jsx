@@ -5,6 +5,7 @@ import LiveScoreTicker from './LiveScoreTicker';
 import Head from 'next/head';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import LocationSelector from '@/components/LocationSelector';
 
 export default function Layout({ children, title = 'Bobanest – Best Bubble Tea', dark = false }) {
   const [fbSettings, setFbSettings] = useState({ pixelId: '', enabled: false });
@@ -33,6 +34,7 @@ export default function Layout({ children, title = 'Bobanest – Best Bubble Tea
       <FacebookPixel pixelId={fbSettings.pixelId} enabled={fbSettings.enabled} />
       <div className={`flex flex-col min-h-screen ${useDarkTheme ? 'bg-[#1a0f0c]' : ''}`}>
         {isHomePage && <LiveScoreTicker />}
+        {!isAdminRoute && !isEmployeeRoute && <LocationSelector />}
         <Navbar dark={useDarkTheme} />
         <main className="flex-grow">{children}</main>
         <Footer dark={useDarkTheme} />

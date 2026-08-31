@@ -2,6 +2,7 @@ import Layout from '@/components/Layout';
 import { useState, useRef, useEffect } from 'react';
 import { useCart } from '@/components/CartContext';
 import ProductModal from '@/components/ProductModal';
+import { getSelectedPickupLocation } from '@/components/LocationSelector';
 
 const DESCRIPTION_VISIBLE_MS = 4000;
 
@@ -26,8 +27,26 @@ function getProductPromotion(product, promotions) {
 }
 
 export default function ProductsPage({ products, promotions }) {
-  const categories = [...new Set(products.map(p => p.category))];
+  const [selectedLocation, setSelectedLocation] = useState('');
+
+  useEffect(() => {
+    setSelectedLocation(getSelectedPickupLocation());
+  }, []);
+
+  const visibleProducts = products.filter(product => {
+    if (!selectedLocation) return true;
+    const productLocations = Array.isArray(product.locations) ? product.locations : [];
+    if (productLocations.length === 0) return true;
+    return productLocations.includes(selectedLocation);
+  });
+
+  const categories = [...new Set(visibleProducts.map(p => p.category))];
   const [activeCategory, setActiveCategory] = useState(categories[0] || '');
+  useEffect(() => {
+    if (categories.length > 0 && !categories.includes(activeCategory)) {
+      setActiveCategory(categories[0]);
+    }
+  }, [categories, activeCategory]);
   const [modalProduct, setModalProduct] = useState(null);
   const [modifierGroups, setModifierGroups] = useState([]);
   const [activeDescriptionProductId, setActiveDescriptionProductId] = useState(null);
@@ -94,7 +113,7 @@ export default function ProductsPage({ products, promotions }) {
 
   const groupedProducts = categories.map(cat => ({
     category: cat,
-    items: products.filter(p => p.category === cat),
+    items: visibleProducts.filter(p => p.category === cat),
   }));
 
   const handleAddToCart = (productWithModifiers) => {
@@ -111,7 +130,11 @@ export default function ProductsPage({ products, promotions }) {
 
   return (
     <Layout title="Our Menu – Bobanest">
-      {/* Sticky Category Bar */}
+      {selectedLocation && (
+        <div className="bg-amber-50 border-b border-amber-200 text-sm text-amber-900 py-2">
+          <div className="max-w-7xl mx-auto px-4">Viewing menu for: <strong>{selectedLocation}</strong></div>
+        </div>
+      )}
       <div className="sticky top-16 z-20 bg-white shadow-md overflow-x-auto py-3 px-4">
         <div className="flex justify-center gap-4 min-w-max">
           {categories.map(cat => (
@@ -126,53 +149,58 @@ export default function ProductsPage({ products, promotions }) {
         </div>
       </div>
 
-      {/* Category Sections */}
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {groupedProducts.map(({ category, items }) => (
-          <div key={category} ref={el => (categoryRefs.current[category] = el)} className="mb-12">
-            <h2 className="text-2xl font-bold mb-6">{category}</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-              {items.map(product => {
-                const promo = getProductPromotion(product, promotions);
-                const showNew = isProductNew(product);
-                return (
-                  <div key={product._id} className="product-card bg-white rounded-lg shadow p-4 text-center hover:shadow-md transition relative">
-                    {promo && (
-                      <div className={`absolute top-2 left-2 ${promo.color} text-white text-xs font-bold px-2 py-1 rounded-full z-10`}>
-                        {promo.text}
-                      </div>
-                    )}
-                    {showNew && (
-                      <div className="absolute top-2 right-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full z-10">
-                        NEW
-                      </div>
-                    )}
-                    <div className="cup-container h-32 flex items-center justify-center">
-                      <img
-                        src={product.imageUrl}
-                        alt={product.name}
-                        className="product-cup-image max-h-full max-w-full object-contain cursor-pointer"
-                        onClick={() => showDescription(product._id)}
-                        onTouchStart={() => showDescription(product._id)}
-                      />
-                    </div>
-                    <h3 className="font-bold mt-2">{product.name}</h3>
-                    {activeDescriptionProductId === product._id && (
-                      <p className="text-xs text-gray-600 mt-1 min-h-[2.5rem]">{product.description}</p>
-                    )}
-                    <p className="text-primary font-bold mt-1">${product.price}</p>
-                    <button
-                      onClick={() => setModalProduct(product)}
-                      className="mt-3 bg-secondary text-white px-4 py-1 rounded-full text-sm hover:bg-primary transition"
-                    >
-                      Add to Cart
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+        {groupedProducts.length === 0 ? (
+          <div className="bg-white rounded-xl shadow p-8 text-center text-gray-600">
+            No menu items are currently available for <strong>{selectedLocation || 'this pickup location'}</strong>.
           </div>
-        ))}
+        ) : (
+          groupedProducts.map(({ category, items }) => (
+            <div key={category} ref={el => (categoryRefs.current[category] = el)} className="mb-12">
+              <h2 className="text-2xl font-bold mb-6">{category}</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                {items.map(product => {
+                  const promo = getProductPromotion(product, promotions);
+                  const showNew = isProductNew(product);
+                  return (
+                    <div key={product._id} className="product-card bg-white rounded-lg shadow p-4 text-center hover:shadow-md transition relative">
+                      {promo && (
+                        <div className={`absolute top-2 left-2 ${promo.color} text-white text-xs font-bold px-2 py-1 rounded-full z-10`}>
+                          {promo.text}
+                        </div>
+                      )}
+                      {showNew && (
+                        <div className="absolute top-2 right-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full z-10">
+                          NEW
+                        </div>
+                      )}
+                      <div className="cup-container h-32 flex items-center justify-center">
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="product-cup-image max-h-full max-w-full object-contain cursor-pointer"
+                          onClick={() => showDescription(product._id)}
+                          onTouchStart={() => showDescription(product._id)}
+                        />
+                      </div>
+                      <h3 className="font-bold mt-2">{product.name}</h3>
+                      {activeDescriptionProductId === product._id && (
+                        <p className="text-xs text-gray-600 mt-1 min-h-[2.5rem]">{product.description}</p>
+                      )}
+                      <p className="text-primary font-bold mt-1">${product.price}</p>
+                      <button
+                        onClick={() => setModalProduct(product)}
+                        className="mt-3 bg-secondary text-white px-4 py-1 rounded-full text-sm hover:bg-primary transition"
+                      >
+                        Add to Cart
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {modalProduct && (

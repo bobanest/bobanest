@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { loadStripe } from '@stripe/stripe-js';
 import { useState, useEffect } from 'react';
 import { trackInitiateCheckout } from '@/lib/facebookTracking';
+import { getSelectedPickupLocation, setSelectedPickupLocation } from '@/components/LocationSelector';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
@@ -70,6 +71,8 @@ export default function CartPage() {
   const [emailSaved, setEmailSaved] = useState(false);
   const [customerPhone, setCustomerPhone] = useState('');
   const [orderType, setOrderType] = useState('pickup');
+  const [pickupLocations, setPickupLocations] = useState([]);
+  const [pickupLocation, setPickupLocation] = useState(getSelectedPickupLocation());
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduledTime, setScheduledTime] = useState(toDatetimeLocal(getMinScheduledTime()));
@@ -130,13 +133,35 @@ export default function CartPage() {
       .catch(() => {});
   }, []);
 
-  // Fetch store hours
+  // Fetch pickup locations and store hours
   useEffect(() => {
+    fetch('/api/locations')
+      .then(r => r.json())
+      .then(data => {
+        const locations = Array.isArray(data) ? data.filter(item => item.isActive !== false) : [];
+        setPickupLocations(locations);
+
+        const storedLocation = getSelectedPickupLocation();
+        if (storedLocation && locations.some(location => location.name === storedLocation)) {
+          setPickupLocation(storedLocation);
+        } else if (locations.length > 0) {
+          setPickupLocation(locations[0].name);
+          setSelectedPickupLocation(locations[0].name);
+        }
+      })
+      .catch(() => {});
+
     fetch('/api/store-hours')
       .then(r => r.json())
       .then(d => setStoreInfo(d))
       .catch(() => {}); // fail open — don't block checkout if API fails
   }, []);
+
+  useEffect(() => {
+    if (pickupLocation) {
+      setSelectedPickupLocation(pickupLocation);
+    }
+  }, [pickupLocation]);
 
   // Auto-enable scheduling when store is currently closed
   useEffect(() => {
@@ -349,6 +374,10 @@ export default function CartPage() {
       setError('Please enter your phone number so we can contact you about your order');
       return;
     }
+    if (orderType === 'pickup' && !pickupLocation.trim()) {
+      setError('Please choose a pickup location');
+      return;
+    }
     if (orderType === 'delivery' && !deliveryEligible) {
       setError(`Delivery is available only when order subtotal is more than $${DELIVERY_MIN_ORDER_SUBTOTAL.toFixed(2)}.`);
       return;
@@ -381,6 +410,7 @@ export default function CartPage() {
         body: JSON.stringify({
           items: cartItemsForStripe,
           orderType,
+          pickupLocation: orderType === 'pickup' ? pickupLocation : '',
           deliveryAddress: orderType === 'delivery' ? deliveryAddress.trim() : '',
           appliedPromotions,
           couponCode: appliedCoupon ? appliedCoupon.code : null,
@@ -639,6 +669,24 @@ export default function CartPage() {
                     onChange={e => setDeliveryAddress(e.target.value)}
                     className="w-full border p-2 rounded text-sm"
                   />
+                </div>
+              )}
+              {orderType === 'pickup' && (
+                <div className="mt-2">
+                  <label className="block font-semibold text-sm mb-1">Pickup Location <span className="text-red-500">*</span></label>
+                  <select
+                    value={pickupLocation}
+                    onChange={e => setPickupLocation(e.target.value)}
+                    className="w-full border p-2 rounded text-sm"
+                  >
+                    {pickupLocations.length === 0 ? (
+                      <option value="">Loading locations...</option>
+                    ) : (
+                      pickupLocations.map(location => (
+                        <option key={location._id || location.slug || location.name} value={location.name}>{location.name}</option>
+                      ))
+                    )}
+                  </select>
                 </div>
               )}
             </div>
