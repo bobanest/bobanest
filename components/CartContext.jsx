@@ -16,17 +16,24 @@ export function CartProvider({ children }) {
   useEffect(() => {
     fetch('/api/admin/promotions?active=true')
       .then(async (res) => {
-        const contentType = res.headers.get('content-type') || '';
+        const rawText = await res.text();
         if (!res.ok) {
-          throw new Error(`Promotions request failed (${res.status})`);
+          return [];
         }
-        if (!contentType.includes('application/json')) {
-          throw new Error('Promotions API did not return JSON');
+
+        if (!rawText) {
+          return [];
         }
-        return res.json();
+
+        try {
+          const data = JSON.parse(rawText);
+          return Array.isArray(data) ? data : [];
+        } catch {
+          return [];
+        }
       })
       .then(data => {
-        setPromotions(Array.isArray(data) ? data : []);
+        setPromotions(data);
         setPromotionsLoaded(true);
       })
       .catch(err => {

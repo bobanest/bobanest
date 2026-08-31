@@ -128,9 +128,18 @@ export default function CartPage() {
   // Fetch active promotions
   useEffect(() => {
     fetch('/api/admin/promotions?active=true')
-      .then(res => res.json())
+      .then(async (res) => {
+        const rawText = await res.text();
+        if (!res.ok || !rawText) return [];
+        try {
+          const data = JSON.parse(rawText);
+          return Array.isArray(data) ? data : [];
+        } catch {
+          return [];
+        }
+      })
       .then(data => setPromotions(data))
-      .catch(() => {});
+      .catch(() => setPromotions([]));
   }, []);
 
   // Fetch pickup locations and store hours
