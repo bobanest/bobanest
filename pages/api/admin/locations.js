@@ -1,13 +1,28 @@
 import dbConnect from '@/lib/dbConnect';
 import Location from '@/lib/models/Location';
 
+function dedupeLocations(locations = []) {
+  const seen = new Map();
+
+  for (const location of locations) {
+    const name = String(location?.name || '').trim();
+    const slug = String(location?.slug || '').trim();
+    const key = (slug || name || '').toLowerCase().replace(/\s+/g, ' ');
+
+    if (!key || seen.has(key)) continue;
+    seen.set(key, { ...location, name, slug });
+  }
+
+  return Array.from(seen.values()).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+}
+
 export default async function handler(req, res) {
   await dbConnect();
 
   if (req.method === 'GET') {
     try {
       const locations = await Location.find({}).sort({ name: 1 }).lean();
-      return res.status(200).json(locations);
+      return res.status(200).json(dedupeLocations(locations));
     } catch (error) {
       return res.status(500).json({ error: error.message || 'Unable to load locations' });
     }
