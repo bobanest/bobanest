@@ -179,6 +179,7 @@ export default function AdminPOSPage() {
   const [completedTickets, setCompletedTickets] = useState([]);
   const [activeTicketId, setActiveTicketId] = useState(null);
   const [activeCompletedTicketId, setActiveCompletedTicketId] = useState(null);
+  const [pendingReceiptTicketId, setPendingReceiptTicketId] = useState(null);
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -212,6 +213,9 @@ export default function AdminPOSPage() {
       if (typeof state.selectedLocation === 'string') setSelectedLocation(state.selectedLocation);
       if (typeof state.activeCompletedTicketId === 'string') {
         setActiveCompletedTicketId(state.activeCompletedTicketId || null);
+      }
+      if (typeof state.pendingReceiptTicketId === 'string') {
+        setPendingReceiptTicketId(state.pendingReceiptTicketId || null);
       }
     };
 
@@ -344,6 +348,7 @@ export default function AdminPOSPage() {
       activeTicketId: activeTicketId || '',
       selectedLocation,
       activeCompletedTicketId: activeCompletedTicketId || '',
+      pendingReceiptTicketId: pendingReceiptTicketId || '',
     };
 
     try {
@@ -359,7 +364,7 @@ export default function AdminPOSPage() {
     }).catch((syncError) => {
       console.warn('Unable to sync POS state to server', syncError);
     });
-  }, [runtimeHydrated, tickets, completedTickets, activeTicketId, selectedLocation, activeCompletedTicketId]);
+  }, [runtimeHydrated, tickets, completedTickets, activeTicketId, selectedLocation, activeCompletedTicketId, pendingReceiptTicketId]);
 
   useEffect(() => {
     const requiredPasscode = String(fullscreenPasscode || '').trim();
@@ -412,6 +417,10 @@ export default function AdminPOSPage() {
   const activeCompletedTicket = useMemo(
     () => completedTickets.find((ticket) => ticket.id === activeCompletedTicketId) || null,
     [completedTickets, activeCompletedTicketId]
+  );
+  const pendingReceiptTicket = useMemo(
+    () => completedTickets.find((ticket) => ticket.id === pendingReceiptTicketId) || null,
+    [completedTickets, pendingReceiptTicketId]
   );
 
   const printReceipt = async (ticket, preparedWindow = null) => {
@@ -598,6 +607,7 @@ export default function AdminPOSPage() {
   const openTicket = (ticketId) => {
     setActiveTicketId(ticketId);
     setActiveCompletedTicketId(null);
+    setPendingReceiptTicketId(null);
     setSelectedCategory('');
     setSelectedProductId('');
     setSelectedModifierOptions({});
@@ -607,6 +617,7 @@ export default function AdminPOSPage() {
   const openCompletedTicket = (ticketId) => {
     setActiveCompletedTicketId(ticketId);
     setActiveTicketId(null);
+    setPendingReceiptTicketId(null);
     setSelectedCategory('');
     setSelectedProductId('');
     setSelectedModifierOptions({});
@@ -631,6 +642,7 @@ export default function AdminPOSPage() {
     setSelectedModifierOptions({});
     setError('');
     setActiveCompletedTicketId(null);
+    setPendingReceiptTicketId(null);
     setMessage(`Ticket #${activeTicket.ticketNumber} voided.`);
   };
 
@@ -754,9 +766,6 @@ export default function AdminPOSPage() {
       }
     }
 
-    const shouldTriggerPrint = ['browser', 'network', 'bluetooth'].includes(String(printerSettings.mode || 'browser'));
-    const printWindow = shouldTriggerPrint ? window.open('', '_blank', 'width=420,height=800') : null;
-
     setSavingOrder(true);
     setError('');
     setMessage('');
@@ -849,26 +858,13 @@ export default function AdminPOSPage() {
       setTickets((prev) => prev.filter((ticket) => ticket.id !== activeTicket.id));
       setActiveTicketId(null);
       setActiveCompletedTicketId(completedRecord.id);
+      setPendingReceiptTicketId(completedRecord.id);
       setSelectedCategory('');
       setSelectedProductId('');
       setSelectedModifierOptions({});
-
-      if (shouldTriggerPrint) {
-        try {
-          await printReceipt(completedRecord, printWindow);
-          setMessage(`Ticket ${activeTicket.ticketNumber} completed and sent to print.`);
-        } catch (printError) {
-          console.error('POS receipt print error:', printError);
-          setMessage(`Ticket ${activeTicket.ticketNumber} completed, but receipt printing needs browser permission or printer selection.`);
-        }
-      } else {
-        setMessage(`Ticket ${activeTicket.ticketNumber} completed. Payment recorded.`);
-      }
+      setMessage(`Ticket ${activeTicket.ticketNumber} completed. Print the receipt to finish.`);
     } catch (submitError) {
       console.error('POS ticket save error:', submitError);
-      if (printWindow && !printWindow.closed) {
-        printWindow.close();
-      }
       setError(submitError.message || 'Failed to complete ticket.');
     } finally {
       setSavingOrder(false);
@@ -996,6 +992,50 @@ export default function AdminPOSPage() {
                   )}
                 </div>
               </div>
+
+              {pendingReceiptTicket ? (
+                <div className="bg-white rounded-lg shadow border-2 border-blue-200 p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-blue-600">Payment complete</p>
+                      <h3 className="text-xl font-semibold mt-1">Print receipt for ticket #{pendingReceiptTicket.ticketNumber}</h3>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {pendingReceiptTicket.location} • {pendingReceiptTicket.paymentSummary} • {formatMoney(pendingReceiptTicket.total)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await printReceipt(pendingReceiptTicket);
+                            setPendingReceiptTicketId(null);
+                            setMessage(`Ticket #${pendingReceiptTicket.ticketNumber} printed successfully.`);
+                            setError('');
+                          } catch (printError) {
+                            console.error('POS receipt print error:', printError);
+                            setError(printError.message || 'Unable to print receipt.');
+                          }
+                        }}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700"
+                      >
+                        Print Receipt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPendingReceiptTicketId(null);
+                          setMessage(`Ticket #${pendingReceiptTicket.ticketNumber} saved without printing.`);
+                          setError('');
+                        }}
+                        className="border border-gray-300 bg-white px-4 py-2 rounded-lg font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {activeCompletedTicket ? (
                 <div className="bg-white rounded-lg shadow p-4">
