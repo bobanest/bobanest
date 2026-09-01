@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { date, items, note, grossSales, netSales, discounts, source } = req.body;
+    const { date, items, note, grossSales, netSales, discounts, source, skipInventory } = req.body;
     if (!date || !items?.length) {
       return res.status(400).json({ error: 'date and items required' });
     }
@@ -28,15 +28,17 @@ export default async function handler(req, res) {
     const normalizedItems = items.map(i => ({ ...i, name: i.name || i.productName }));
 
     let deductions = 0;
-    try {
-      const results = await deductInventoryForItems(normalizedItems, {
-        source: source === 'csv_import' ? 'walkin' : 'walkin',
-        sourceRef: note || '',
-        date: logDate,
-      });
-      deductions = results.length;
-    } catch (e) {
-      console.error('Walk-in inventory deduction error:', e.message);
+    if (!skipInventory) {
+      try {
+        const results = await deductInventoryForItems(normalizedItems, {
+          source: source === 'csv_import' ? 'walkin' : 'walkin',
+          sourceRef: note || '',
+          date: logDate,
+        });
+        deductions = results.length;
+      } catch (e) {
+        console.error('Walk-in inventory deduction error:', e.message);
+      }
     }
 
     const log = await WalkInLog.create({

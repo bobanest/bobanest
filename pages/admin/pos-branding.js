@@ -8,53 +8,107 @@ import AdminLayout from '@/components/AdminLayout';
 export default function POSBrandingPage() {
   const [logo, setLogo] = useState('/favicon.ico');
   const [fileName, setFileName] = useState('');
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
-    try {
-      const savedLogo = localStorage.getItem('bobanest-pos-logo');
-      if (savedLogo) setLogo(savedLogo);
-    } catch (loadError) {
-      console.warn('Unable to load saved POS logo', loadError);
-    }
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      try {
+        const savedLogo = localStorage.getItem('bobanest-pos-logo');
+        if (savedLogo && !cancelled) setLogo(savedLogo);
+      } catch (loadError) {
+        console.warn('Unable to load saved POS logo', loadError);
+      }
+
+      try {
+        const response = await fetch('/api/admin/pos-settings');
+        const text = await response.text();
+        if (!response.ok) throw new Error(`Failed to load POS settings (${response.status})`);
+        const settings = text ? JSON.parse(text) : {};
+        if (cancelled) return;
+        const serverLogo = String(settings.posLogo || '').trim();
+        if (!serverLogo) return;
+        setLogo(serverLogo);
+        localStorage.setItem('bobanest-pos-logo', serverLogo);
+      } catch (loadError) {
+        if (cancelled) return;
+        console.warn('Unable to load POS logo from server', loadError);
+      }
+    };
+
+    loadSettings();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const saveLogoToServer = async (nextLogo) => {
+    const response = await fetch('/api/admin/pos-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'posLogo', value: nextLogo }),
+    });
+    const text = await response.text();
+    let body = {};
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = {};
+      }
+    }
+    if (!response.ok) throw new Error(body?.error || `Failed to save POS logo (${response.status})`);
+  };
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
+    setSaving(true);
+    setError('');
+    setMessage('');
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const result = typeof reader.result === 'string' ? reader.result : '/favicon.ico';
         setLogo(result);
         localStorage.setItem('bobanest-pos-logo', result);
+        await saveLogoToServer(result);
         setMessage('POS logo updated successfully.');
         setError('');
       } catch (saveError) {
         console.warn('Unable to save POS logo', saveError);
-        setError('Unable to save the logo in this browser.');
+        setError(saveError.message || 'Unable to save the logo.');
+      } finally {
+        setSaving(false);
       }
     };
     reader.onerror = () => {
       setError('The image could not be processed. Please try another file.');
+      setSaving(false);
     };
     reader.readAsDataURL(file);
   };
 
-  const resetLogo = () => {
+  const resetLogo = async () => {
     const defaultLogo = '/favicon.ico';
     setLogo(defaultLogo);
     setFileName('');
+    setSaving(true);
     try {
       localStorage.setItem('bobanest-pos-logo', defaultLogo);
+      await saveLogoToServer(defaultLogo);
       setMessage('POS logo reset to default.');
       setError('');
     } catch (saveError) {
       console.warn('Unable to reset POS logo', saveError);
-      setError('Unable to reset the logo in this browser.');
+      setError(saveError.message || 'Unable to reset the logo.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -67,7 +121,7 @@ export default function POSBrandingPage() {
               <p className="text-xs uppercase tracking-[0.2em] text-gray-500 font-semibold">Settings</p>
               <h1 className="text-3xl font-bold text-gray-900 mt-1">POS Logo</h1>
               <p className="text-gray-500 text-sm mt-2">
-                Upload the logo used on the Bobanest POS screen. Changes are saved in this browser immediately.
+                Upload the logo used on the Bobanest POS screen. Changes are saved for all devices.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -107,6 +161,7 @@ export default function POSBrandingPage() {
                   type="file"
                   accept="image/*"
                   onChange={handleFileChange}
+                  disabled={saving}
                   className="block w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 file:mr-4 file:rounded-md file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white file:font-medium hover:file:bg-blue-700"
                 />
                 {fileName ? <p className="mt-2 text-xs text-gray-500">Selected file: {fileName}</p> : null}

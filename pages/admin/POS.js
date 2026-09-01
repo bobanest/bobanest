@@ -6,6 +6,7 @@ import AdminLayout from '@/components/AdminLayout';
 
 const TAX_RATE = 0.07;
 const TICKET_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const POS_STATE_KEY = 'bobanest-pos-state-v1';
 
 function isModifierApplicable(group, productId) {
   const applicable = Array.isArray(group?.applicableProducts) ? group.applicableProducts : [];
@@ -66,11 +67,23 @@ function hasRequiredSelections(groups, selectedOptions) {
   return true;
 }
 
-function getTicketTotals(lines) {
+function getTicketTotals(ticket) {
+  const lines = Array.isArray(ticket?.lines) ? ticket.lines : [];
   const subtotal = lines.reduce((sum, line) => sum + Number(line.unitPrice || 0) * Number(line.quantity || 0), 0);
-  const tax = subtotal * TAX_RATE;
-  const total = subtotal + tax;
-  return { subtotal, tax, total };
+
+  const discountType = String(ticket?.discountType || 'none');
+  const discountValue = Number(ticket?.discountValue || 0);
+  const safeDiscountValue = Number.isFinite(discountValue) ? discountValue : 0;
+  const discountAmount = discountType === 'percent'
+    ? Math.min(subtotal, Math.max(0, (subtotal * safeDiscountValue) / 100))
+    : discountType === 'amount'
+      ? Math.min(subtotal, Math.max(0, safeDiscountValue))
+      : 0;
+
+  const taxable = Math.max(0, subtotal - discountAmount);
+  const tax = taxable * TAX_RATE;
+  const total = taxable + tax;
+  return { subtotal, discountAmount, tax, total };
 }
 
 function createTicketNumber(usedSet) {
@@ -93,6 +106,7 @@ export default function AdminPOSPage() {
   const [tickets, setTickets] = useState([]);
   const [completedTickets, setCompletedTickets] = useState([]);
   const [activeTicketId, setActiveTicketId] = useState(null);
+  const [activeCompletedTicketId, setActiveCompletedTicketId] = useState(null);
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -100,10 +114,29 @@ export default function AdminPOSPage() {
 
   const [loading, setLoading] = useState(true);
   const [savingOrder, setSavingOrder] = useState(false);
+  const [processingRefund, setProcessingRefund] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenGuardEnabled, setFullscreenGuardEnabled] = useState(false);
+  const [allowFullscreenExit, setAllowFullscreenExit] = useState(false);
+  const [fullscreenPasscode, setFullscreenPasscode] = useState('');
   const [posLogo, setPosLogo] = useState('/favicon.ico');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(POS_STATE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.tickets)) setTickets(parsed.tickets);
+      if (Array.isArray(parsed.completedTickets)) setCompletedTickets(parsed.completedTickets);
+      if (typeof parsed.activeTicketId === 'string') setActiveTicketId(parsed.activeTicketId);
+      if (typeof parsed.selectedLocation === 'string') setSelectedLocation(parsed.selectedLocation);
+      if (typeof parsed.activeCompletedTicketId === 'string') setActiveCompletedTicketId(parsed.activeCompletedTicketId);
+    } catch (storageError) {
+      console.warn('Unable to restore POS state', storageError);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,10 +171,13 @@ export default function AdminPOSPage() {
       setProducts(safeProducts);
       setModifiers(safeModifiers);
       setLocations(safeLocations);
-      if (safeLocations.length > 0) {
+      setSelectedLocation((current) => {
+        if (safeLocations.length === 0) return '';
+        const existingStillValid = safeLocations.some((location) => location.name === current);
+        if (existingStillValid) return current;
         const selectable = safeLocations.filter((location) => !location.isComingSoon);
-        setSelectedLocation(selectable[0]?.name || safeLocations[0].name || '');
-      }
+        return selectable[0]?.name || safeLocations[0].name || '';
+      });
       setLoading(false);
     };
 
@@ -158,30 +194,95 @@ export default function AdminPOSPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadPosSettings = async () => {
+      try {
+        const response = await fetch('/api/admin/pos-settings');
+        const text = await response.text();
+        if (!response.ok) throw new Error(`Failed to load POS settings (${response.status})`);
+        const body = text ? JSON.parse(text) : {};
+        if (cancelled) return;
+
+        if (typeof body.posLogo === 'string' && body.posLogo.trim()) {
+          setPosLogo(body.posLogo);
+          try {
+            localStorage.setItem('bobanest-pos-logo', body.posLogo);
+          } catch (storageError) {
+            console.warn('Unable to save POS logo locally', storageError);
+          }
+        }
+        if (typeof body.fullscreenPasscode === 'string') {
+          setFullscreenPasscode(body.fullscreenPasscode);
+        }
+      } catch (loadError) {
+        if (cancelled) return;
+        console.warn('Unable to load POS settings', loadError);
+      }
+    };
+
+    loadPosSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        POS_STATE_KEY,
+        JSON.stringify({
+          tickets,
+          completedTickets,
+          activeTicketId: activeTicketId || '',
+          selectedLocation,
+          activeCompletedTicketId: activeCompletedTicketId || '',
+        })
+      );
+    } catch (storageError) {
+      console.warn('Unable to persist POS state', storageError);
+    }
+  }, [tickets, completedTickets, activeTicketId, selectedLocation, activeCompletedTicketId]);
+
+  useEffect(() => {
+    try {
+      const savedLogo = localStorage.getItem('bobanest-pos-logo');
+      if (savedLogo) setPosLogo(savedLogo);
+    } catch (storageError) {
+      console.warn('Unable to read saved POS logo', storageError);
+    }
+  }, []);
+
+  useEffect(() => {
     const onFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      const inFullscreen = Boolean(document.fullscreenElement);
+      setIsFullscreen(inFullscreen);
+
+      if (!inFullscreen && fullscreenGuardEnabled && fullscreenPasscode && !allowFullscreenExit) {
+        const entered = window.prompt('Enter POS passcode to exit full screen');
+        if (entered === fullscreenPasscode) {
+          setFullscreenGuardEnabled(false);
+          setError('');
+          return;
+        }
+        setError('Passcode required to exit full screen.');
+        document.documentElement.requestFullscreen().catch(() => {
+          setError('Unable to keep POS in fullscreen mode on this device/browser.');
+        });
+      }
     };
     document.addEventListener('fullscreenchange', onFullscreenChange);
     onFullscreenChange();
     return () => {
       document.removeEventListener('fullscreenchange', onFullscreenChange);
     };
-  }, []);
-
-  useEffect(() => {
-    try {
-      const savedLogo = localStorage.getItem('bobanest-pos-logo');
-      if (savedLogo) setPosLogo(savedLogo);
-    } catch (error) {
-      console.warn('Unable to read saved POS logo', error);
-    }
-  }, []);
+  }, [fullscreenGuardEnabled, fullscreenPasscode, allowFullscreenExit]);
 
   useEffect(() => {
     try {
       localStorage.setItem('bobanest-pos-logo', posLogo);
-    } catch (error) {
-      console.warn('Unable to save POS logo', error);
+    } catch (storageError) {
+      console.warn('Unable to save POS logo', storageError);
     }
   }, [posLogo]);
 
@@ -193,6 +294,10 @@ export default function AdminPOSPage() {
   const activeTicket = useMemo(
     () => tickets.find((ticket) => ticket.id === activeTicketId) || null,
     [tickets, activeTicketId]
+  );
+  const activeCompletedTicket = useMemo(
+    () => completedTickets.find((ticket) => ticket.id === activeCompletedTicketId) || null,
+    [completedTickets, activeCompletedTicketId]
   );
 
   const filteredProducts = useMemo(() => {
@@ -244,7 +349,7 @@ export default function AdminPOSPage() {
   }, [modifiers, selectedProduct]);
 
   const ticketTotals = useMemo(
-    () => (activeTicket ? getTicketTotals(activeTicket.lines) : { subtotal: 0, tax: 0, total: 0 }),
+    () => (activeTicket ? getTicketTotals(activeTicket) : { subtotal: 0, discountAmount: 0, tax: 0, total: 0 }),
     [activeTicket]
   );
 
@@ -286,13 +391,26 @@ export default function AdminPOSPage() {
   const toggleFullscreen = async () => {
     try {
       if (document.fullscreenElement) {
+        if (fullscreenGuardEnabled && fullscreenPasscode) {
+          const entered = window.prompt('Enter POS passcode to exit full screen');
+          if (entered !== fullscreenPasscode) {
+            setError('Passcode required to exit full screen.');
+            return;
+          }
+        }
+        setAllowFullscreenExit(true);
+        setFullscreenGuardEnabled(false);
         await document.exitFullscreen();
+        setAllowFullscreenExit(false);
       } else {
         await document.documentElement.requestFullscreen();
+        setFullscreenGuardEnabled(Boolean(fullscreenPasscode));
+        setError('');
       }
     } catch (fullscreenError) {
       console.error('Fullscreen toggle failed:', fullscreenError);
       setError('Unable to change fullscreen mode on this device/browser.');
+      setAllowFullscreenExit(false);
     }
   };
 
@@ -313,10 +431,13 @@ export default function AdminPOSPage() {
       id,
       ticketNumber,
       label: `Ticket ${ticketNumber}`,
+      location: selectedLocation || defaultLocation || '',
       paymentMethod: 'cash',
       isSplitPayment: false,
       splitCash: '',
       splitCard: '',
+      discountType: 'none',
+      discountValue: '',
       orderNote: '',
       lines: [],
       createdAt: new Date().toISOString(),
@@ -324,6 +445,7 @@ export default function AdminPOSPage() {
 
     setTickets((prev) => [...prev, ticket]);
     setActiveTicketId(id);
+    setActiveCompletedTicketId(null);
     setSelectedCategory('');
     setSelectedProductId('');
     setSelectedModifierOptions({});
@@ -333,14 +455,26 @@ export default function AdminPOSPage() {
 
   const openTicket = (ticketId) => {
     setActiveTicketId(ticketId);
+    setActiveCompletedTicketId(null);
     setSelectedCategory('');
     setSelectedProductId('');
     setSelectedModifierOptions({});
     setError('');
   };
 
+  const openCompletedTicket = (ticketId) => {
+    setActiveCompletedTicketId(ticketId);
+    setActiveTicketId(null);
+    setSelectedCategory('');
+    setSelectedProductId('');
+    setSelectedModifierOptions({});
+    setError('');
+    setMessage('');
+  };
+
   const backToTickets = () => {
     setActiveTicketId(null);
+    setActiveCompletedTicketId(null);
     setSelectedCategory('');
     setSelectedProductId('');
     setSelectedModifierOptions({});
@@ -354,7 +488,76 @@ export default function AdminPOSPage() {
     setSelectedProductId('');
     setSelectedModifierOptions({});
     setError('');
+    setActiveCompletedTicketId(null);
     setMessage(`Ticket #${activeTicket.ticketNumber} voided.`);
+  };
+
+  const handleRefundCompletedTicket = async () => {
+    if (!activeCompletedTicket) return;
+    if (activeCompletedTicket.refundedAt) {
+      setError(`Ticket #${activeCompletedTicket.ticketNumber} is already refunded.`);
+      return;
+    }
+
+    setProcessingRefund(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const itemTotals = new Map();
+      for (const line of activeCompletedTicket.lines || []) {
+        const currentQty = itemTotals.get(line.productName) || 0;
+        itemTotals.set(line.productName, currentQty + Number(line.quantity || 0));
+      }
+
+      const refundItems = Array.from(itemTotals.entries()).map(([productName, quantity]) => ({
+        productName,
+        quantity: -Math.abs(quantity),
+      }));
+
+      const response = await fetch('/api/admin/walkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: new Date().toISOString(),
+          items: refundItems,
+          note: `POS refund | ticket: ${activeCompletedTicket.ticketNumber} | location: ${activeCompletedTicket.location || 'N/A'}`,
+          source: 'manual',
+          grossSales: -Math.abs(Number(activeCompletedTicket.subtotal || 0)),
+          netSales: -Math.abs(Number(activeCompletedTicket.total || 0)),
+          discounts: -Math.abs(Number(activeCompletedTicket.discountAmount || 0)),
+          skipInventory: true,
+        }),
+      });
+
+      const text = await response.text();
+      let body = {};
+      if (text) {
+        try {
+          body = JSON.parse(text);
+        } catch {
+          body = {};
+        }
+      }
+      if (!response.ok) {
+        throw new Error(body?.error || `Failed to refund ticket (${response.status})`);
+      }
+
+      const refundedAt = new Date().toISOString();
+      setCompletedTickets((prev) =>
+        prev.map((ticket) =>
+          ticket.id === activeCompletedTicket.id
+            ? { ...ticket, refundedAt, refundReference: body?._id || '' }
+            : ticket
+        )
+      );
+      setMessage(`Ticket #${activeCompletedTicket.ticketNumber} refunded successfully.`);
+    } catch (refundError) {
+      console.error('POS refund failed:', refundError);
+      setError(refundError.message || 'Failed to refund ticket.');
+    } finally {
+      setProcessingRefund(false);
+    }
   };
 
   const handleSelectProduct = (product) => {
@@ -397,6 +600,17 @@ export default function AdminPOSPage() {
 
   const handleCompleteTicket = async () => {
     if (!activeTicket) return;
+    if (!activeTicket.lines.length) {
+      setError('Add at least one item before taking payment.');
+      return;
+    }
+    if (activeTicket.isSplitPayment) {
+      const difference = Math.abs(splitPaidTotal - ticketTotals.total);
+      if (difference > 0.01) {
+        setError('Split payment amounts must match the ticket total.');
+        return;
+      }
+    }
 
     setSavingOrder(true);
     setError('');
@@ -426,12 +640,18 @@ export default function AdminPOSPage() {
       const paymentSummary = activeTicket.isSplitPayment
         ? `split cash ${formatMoney(activeTicket.splitCash || 0)} + card ${formatMoney(activeTicket.splitCard || 0)}`
         : activeTicket.paymentMethod;
+      const discountSummary = ticketTotals.discountAmount > 0
+        ? activeTicket.discountType === 'percent'
+          ? `${Number(activeTicket.discountValue || 0)}%`
+          : formatMoney(activeTicket.discountValue || 0)
+        : '';
 
       const noteParts = [
         'POS sale',
         `ticket: ${activeTicket.ticketNumber}`,
-        `location: ${selectedLocation || defaultLocation || 'N/A'}`,
+        `location: ${activeTicket.location || selectedLocation || defaultLocation || 'N/A'}`,
         `payment: ${paymentSummary}`,
+        discountSummary ? `discount: ${discountSummary}` : '',
         activeTicket.orderNote ? `note: ${activeTicket.orderNote}` : '',
         lineSummary ? `lines: ${lineSummary}` : '',
       ].filter(Boolean);
@@ -446,7 +666,7 @@ export default function AdminPOSPage() {
           source: 'manual',
           grossSales: ticketTotals.subtotal,
           netSales: ticketTotals.total,
-          discounts: 0,
+          discounts: ticketTotals.discountAmount,
         }),
       });
 
@@ -467,9 +687,12 @@ export default function AdminPOSPage() {
       const completedRecord = {
         id: activeTicket.id,
         ticketNumber: activeTicket.ticketNumber,
-        location: selectedLocation || defaultLocation || 'N/A',
+        location: activeTicket.location || selectedLocation || defaultLocation || 'N/A',
         lines: activeTicket.lines,
         subtotal: ticketTotals.subtotal,
+        discountAmount: ticketTotals.discountAmount,
+        discountType: activeTicket.discountType || 'none',
+        discountValue: Number(activeTicket.discountValue || 0),
         tax: ticketTotals.tax,
         total: ticketTotals.total,
         paymentSummary,
@@ -480,10 +703,11 @@ export default function AdminPOSPage() {
       setCompletedTickets((prev) => [completedRecord, ...prev].slice(0, 30));
       setTickets((prev) => prev.filter((ticket) => ticket.id !== activeTicket.id));
       setActiveTicketId(null);
+      setActiveCompletedTicketId(completedRecord.id);
       setSelectedCategory('');
       setSelectedProductId('');
       setSelectedModifierOptions({});
-      setMessage(`Ticket ${activeTicket.ticketNumber} completed. Inventory deductions processed: ${body?.deductions ?? 0}.`);
+      setMessage(`Ticket ${activeTicket.ticketNumber} completed. Payment recorded.`);
     } catch (submitError) {
       console.error('POS ticket save error:', submitError);
       setError(submitError.message || 'Failed to complete ticket.');
@@ -559,7 +783,7 @@ export default function AdminPOSPage() {
                   ) : (
                     <div className="space-y-3">
                       {tickets.map((ticket) => {
-                        const totals = getTicketTotals(ticket.lines);
+                        const totals = getTicketTotals(ticket);
                         return (
                           <button
                             key={ticket.id}
@@ -569,7 +793,7 @@ export default function AdminPOSPage() {
                           >
                             <p className="font-semibold">#{ticket.ticketNumber}</p>
                             <p className="text-sm text-gray-600 mt-1">
-                              {selectedLocation || 'No location'} • {ticket.lines.length} line(s) • {formatMoney(totals.total)}
+                              {ticket.location || 'No location'} • {ticket.lines.length} line(s) • {formatMoney(totals.total)}
                             </p>
                           </button>
                         );
@@ -585,7 +809,16 @@ export default function AdminPOSPage() {
                   ) : (
                     <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
                       {completedTickets.map((ticket) => (
-                        <div key={ticket.id} className="border rounded-lg p-3 bg-gray-50">
+                        <button
+                          key={ticket.id}
+                          type="button"
+                          onClick={() => openCompletedTicket(ticket.id)}
+                          className={`w-full text-left border rounded-lg p-3 transition ${
+                            activeCompletedTicketId === ticket.id
+                              ? 'bg-blue-50 border-blue-300'
+                              : 'bg-gray-50 hover:bg-gray-100 border-gray-200'
+                          }`}
+                        >
                           <p className="font-semibold text-sm">#{ticket.ticketNumber}</p>
                           <p className="text-xs text-gray-600 mt-1">
                             {ticket.location} • {new Date(ticket.completedAt).toLocaleString()}
@@ -593,12 +826,68 @@ export default function AdminPOSPage() {
                           <p className="text-xs text-gray-600 mt-1">
                             {ticket.lines.length} line(s) • {ticket.paymentSummary} • {formatMoney(ticket.total)}
                           </p>
-                        </div>
+                          {ticket.refundedAt ? (
+                            <p className="text-xs font-semibold text-red-600 mt-1">
+                              Refunded on {new Date(ticket.refundedAt).toLocaleString()}
+                            </p>
+                          ) : null}
+                        </button>
                       ))}
                     </div>
                   )}
                 </div>
               </div>
+
+              {activeCompletedTicket ? (
+                <div className="bg-white rounded-lg shadow p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold">Completed Ticket #{activeCompletedTicket.ticketNumber}</h3>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {activeCompletedTicket.location} • {new Date(activeCompletedTicket.completedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveCompletedTicketId(null)}
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <div className="mt-3 space-y-2 max-h-[30vh] overflow-y-auto pr-1">
+                    {(activeCompletedTicket.lines || []).map((line) => (
+                      <div key={`${activeCompletedTicket.id}-${line.lineKey}`} className="border rounded p-2 text-sm">
+                        <p className="font-medium">{line.quantity} x {line.productName}</p>
+                        {line.modifiers?.length ? (
+                          <p className="text-xs text-gray-600 mt-1">
+                            {line.modifiers.map((mod) => `${mod.groupName}: ${mod.options.join(', ')}`).join(' • ')}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 border-t pt-3 text-sm space-y-1">
+                    <div className="flex justify-between"><span>Subtotal</span><span>{formatMoney(activeCompletedTicket.subtotal)}</span></div>
+                    <div className="flex justify-between"><span>Discount</span><span>-{formatMoney(activeCompletedTicket.discountAmount || 0)}</span></div>
+                    <div className="flex justify-between"><span>Tax</span><span>{formatMoney(activeCompletedTicket.tax)}</span></div>
+                    <div className="flex justify-between font-semibold"><span>Total</span><span>{formatMoney(activeCompletedTicket.total)}</span></div>
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRefundCompletedTicket}
+                      disabled={processingRefund || Boolean(activeCompletedTicket.refundedAt)}
+                      className="bg-red-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-60"
+                    >
+                      {activeCompletedTicket.refundedAt ? 'Refunded' : processingRefund ? 'Refunding...' : 'Refund Ticket'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -609,7 +898,7 @@ export default function AdminPOSPage() {
                     Back to Tickets
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mb-3">Location: {selectedLocation || defaultLocation || 'N/A'}</p>
+                <p className="text-xs text-gray-500 mb-3">Location: {activeTicket.location || selectedLocation || defaultLocation || 'N/A'}</p>
 
                 <div className="space-y-3 max-h-[46vh] overflow-y-auto pr-1">
                   {activeTicket.lines.length === 0 ? (
@@ -648,8 +937,48 @@ export default function AdminPOSPage() {
                   )}
                 </div>
 
+                <div className="mt-4">
+                  <label className="block text-xs text-gray-600 mb-1">Discount</label>
+                  <div className="grid grid-cols-[1fr_1fr] gap-2">
+                    <select
+                      value={activeTicket.discountType || 'none'}
+                      onChange={(e) =>
+                        updateActiveTicket({
+                          discountType: e.target.value,
+                          discountValue: e.target.value === 'none' ? '' : activeTicket.discountValue || '',
+                        })
+                      }
+                      className="w-full border rounded-lg px-3 py-2 bg-white text-sm"
+                    >
+                      <option value="none">No discount</option>
+                      <option value="percent">Percentage (%)</option>
+                      <option value="amount">Fixed amount ($)</option>
+                    </select>
+                    {(activeTicket.discountType || 'none') === 'none' ? (
+                      <input
+                        type="number"
+                        value=""
+                        readOnly
+                        placeholder="Discount value"
+                        className="w-full border rounded-lg px-3 py-2 bg-gray-100 text-sm"
+                      />
+                    ) : (
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={activeTicket.discountValue}
+                        onChange={(e) => updateActiveTicket({ discountValue: e.target.value })}
+                        placeholder={activeTicket.discountType === 'percent' ? '0 - 100' : 'Amount'}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    )}
+                  </div>
+                </div>
+
                 <div className="mt-4 border-t pt-4 space-y-2 text-sm">
                   <div className="flex justify-between"><span>Subtotal</span><span>{formatMoney(ticketTotals.subtotal)}</span></div>
+                  <div className="flex justify-between"><span>Discount</span><span>-{formatMoney(ticketTotals.discountAmount)}</span></div>
                   <div className="flex justify-between"><span>Tax (7%)</span><span>{formatMoney(ticketTotals.tax)}</span></div>
                   <div className="flex justify-between text-base font-bold"><span>Total</span><span>{formatMoney(ticketTotals.total)}</span></div>
                 </div>
@@ -738,7 +1067,7 @@ export default function AdminPOSPage() {
                     disabled={savingOrder}
                     className="bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-60"
                   >
-                    {savingOrder ? 'Closing...' : 'Close Ticket'}
+                    {savingOrder ? 'Processing Payment...' : 'Take Payment'}
                   </button>
                 </div>
               </div>
@@ -865,4 +1194,3 @@ export default function AdminPOSPage() {
     </ProtectedRoute>
   );
 }
-
