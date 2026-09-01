@@ -179,7 +179,6 @@ export default function AdminPOSPage() {
   const [completedTickets, setCompletedTickets] = useState([]);
   const [activeTicketId, setActiveTicketId] = useState(null);
   const [activeCompletedTicketId, setActiveCompletedTicketId] = useState(null);
-  const [pendingReceiptTicketId, setPendingReceiptTicketId] = useState(null);
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -198,6 +197,9 @@ export default function AdminPOSPage() {
     ipAddress: '',
     printCopies: 1,
   });
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [cashReceived, setCashReceived] = useState('');
+  const [printReceiptOnPayment, setPrintReceiptOnPayment] = useState(true);
   const [runtimeHydrated, setRuntimeHydrated] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -213,9 +215,6 @@ export default function AdminPOSPage() {
       if (typeof state.selectedLocation === 'string') setSelectedLocation(state.selectedLocation);
       if (typeof state.activeCompletedTicketId === 'string') {
         setActiveCompletedTicketId(state.activeCompletedTicketId || null);
-      }
-      if (typeof state.pendingReceiptTicketId === 'string') {
-        setPendingReceiptTicketId(state.pendingReceiptTicketId || null);
       }
     };
 
@@ -348,7 +347,6 @@ export default function AdminPOSPage() {
       activeTicketId: activeTicketId || '',
       selectedLocation,
       activeCompletedTicketId: activeCompletedTicketId || '',
-      pendingReceiptTicketId: pendingReceiptTicketId || '',
     };
 
     try {
@@ -364,7 +362,7 @@ export default function AdminPOSPage() {
     }).catch((syncError) => {
       console.warn('Unable to sync POS state to server', syncError);
     });
-  }, [runtimeHydrated, tickets, completedTickets, activeTicketId, selectedLocation, activeCompletedTicketId, pendingReceiptTicketId]);
+  }, [runtimeHydrated, tickets, completedTickets, activeTicketId, selectedLocation, activeCompletedTicketId]);
 
   useEffect(() => {
     const requiredPasscode = String(fullscreenPasscode || '').trim();
@@ -417,10 +415,6 @@ export default function AdminPOSPage() {
   const activeCompletedTicket = useMemo(
     () => completedTickets.find((ticket) => ticket.id === activeCompletedTicketId) || null,
     [completedTickets, activeCompletedTicketId]
-  );
-  const pendingReceiptTicket = useMemo(
-    () => completedTickets.find((ticket) => ticket.id === pendingReceiptTicketId) || null,
-    [completedTickets, pendingReceiptTicketId]
   );
 
   const printReceipt = async (ticket, preparedWindow = null) => {
@@ -505,6 +499,9 @@ export default function AdminPOSPage() {
     () => (activeTicket ? getTicketTotals(activeTicket) : { subtotal: 0, discountAmount: 0, tax: 0, total: 0 }),
     [activeTicket]
   );
+  const isCashPaymentFlow = Boolean(activeTicket && !activeTicket.isSplitPayment && activeTicket.paymentMethod === 'cash');
+  const cashReceivedAmount = Number(cashReceived || 0);
+  const cashChangeDue = Math.max(0, cashReceivedAmount - ticketTotals.total);
 
   const splitPaidTotal = useMemo(() => {
     if (!activeTicket?.isSplitPayment) return 0;
@@ -607,7 +604,7 @@ export default function AdminPOSPage() {
   const openTicket = (ticketId) => {
     setActiveTicketId(ticketId);
     setActiveCompletedTicketId(null);
-    setPendingReceiptTicketId(null);
+    setPaymentDialogOpen(false);
     setSelectedCategory('');
     setSelectedProductId('');
     setSelectedModifierOptions({});
@@ -617,7 +614,7 @@ export default function AdminPOSPage() {
   const openCompletedTicket = (ticketId) => {
     setActiveCompletedTicketId(ticketId);
     setActiveTicketId(null);
-    setPendingReceiptTicketId(null);
+    setPaymentDialogOpen(false);
     setSelectedCategory('');
     setSelectedProductId('');
     setSelectedModifierOptions({});
@@ -628,6 +625,7 @@ export default function AdminPOSPage() {
   const backToTickets = () => {
     setActiveTicketId(null);
     setActiveCompletedTicketId(null);
+    setPaymentDialogOpen(false);
     setSelectedCategory('');
     setSelectedProductId('');
     setSelectedModifierOptions({});
@@ -642,7 +640,7 @@ export default function AdminPOSPage() {
     setSelectedModifierOptions({});
     setError('');
     setActiveCompletedTicketId(null);
-    setPendingReceiptTicketId(null);
+    setPaymentDialogOpen(false);
     setMessage(`Ticket #${activeTicket.ticketNumber} voided.`);
   };
 
@@ -752,7 +750,7 @@ export default function AdminPOSPage() {
     setMessage(`Added ${selectedProduct.name}`);
   };
 
-  const handleCompleteTicket = async () => {
+  const openPaymentDialog = () => {
     if (!activeTicket) return;
     if (!activeTicket.lines.length) {
       setError('Add at least one item before taking payment.');
@@ -765,6 +763,46 @@ export default function AdminPOSPage() {
         return;
       }
     }
+
+    setCashReceived(
+      !activeTicket.isSplitPayment && activeTicket.paymentMethod === 'cash'
+        ? ticketTotals.total.toFixed(2)
+        : ''
+    );
+    setPrintReceiptOnPayment(true);
+    setPaymentDialogOpen(true);
+    setError('');
+  };
+
+  const closePaymentDialog = () => {
+    if (savingOrder) return;
+    setPaymentDialogOpen(false);
+    setCashReceived('');
+    setPrintReceiptOnPayment(true);
+  };
+
+  const handleCompleteTicket = async ({ shouldPrintReceipt = false, cashTendered = '' } = {}) => {
+    if (!activeTicket) return;
+    if (!activeTicket.lines.length) {
+      setError('Add at least one item before taking payment.');
+      return;
+    }
+    if (activeTicket.isSplitPayment) {
+      const difference = Math.abs(splitPaidTotal - ticketTotals.total);
+      if (difference > 0.01) {
+        setError('Split payment amounts must match the ticket total.');
+        return;
+      }
+    }
+
+    const tenderedAmount = Number(cashTendered || 0);
+    if (isCashPaymentFlow && tenderedAmount + 0.001 < ticketTotals.total) {
+      setError('Cash received must be equal to or more than the total.');
+      return;
+    }
+
+    const shouldTriggerPrint = shouldPrintReceipt && ['browser', 'network', 'bluetooth'].includes(String(printerSettings.mode || 'browser'));
+    const printWindow = shouldTriggerPrint ? window.open('', '_blank', 'width=420,height=800') : null;
 
     setSavingOrder(true);
     setError('');
@@ -793,7 +831,9 @@ export default function AdminPOSPage() {
 
       const paymentSummary = activeTicket.isSplitPayment
         ? `split cash ${formatMoney(activeTicket.splitCash || 0)} + card ${formatMoney(activeTicket.splitCard || 0)}`
-        : activeTicket.paymentMethod;
+        : isCashPaymentFlow
+          ? `cash received ${formatMoney(tenderedAmount)} | change ${formatMoney(Math.max(0, tenderedAmount - ticketTotals.total))}`
+          : activeTicket.paymentMethod;
       const discountSummary = ticketTotals.discountAmount > 0
         ? activeTicket.discountType === 'percent'
           ? `${Number(activeTicket.discountValue || 0)}%`
@@ -858,13 +898,29 @@ export default function AdminPOSPage() {
       setTickets((prev) => prev.filter((ticket) => ticket.id !== activeTicket.id));
       setActiveTicketId(null);
       setActiveCompletedTicketId(completedRecord.id);
-      setPendingReceiptTicketId(completedRecord.id);
+      setPaymentDialogOpen(false);
+      setCashReceived('');
+      setPrintReceiptOnPayment(true);
       setSelectedCategory('');
       setSelectedProductId('');
       setSelectedModifierOptions({});
-      setMessage(`Ticket ${activeTicket.ticketNumber} completed. Print the receipt to finish.`);
+
+      if (shouldTriggerPrint) {
+        try {
+          await printReceipt(completedRecord, printWindow);
+          setMessage(`Ticket ${activeTicket.ticketNumber} completed and receipt printed.`);
+        } catch (printError) {
+          console.error('POS receipt print error:', printError);
+          setMessage(`Ticket ${activeTicket.ticketNumber} completed, but receipt printing needs browser permission or printer selection.`);
+        }
+      } else {
+        setMessage(`Ticket ${activeTicket.ticketNumber} completed. Payment recorded.`);
+      }
     } catch (submitError) {
       console.error('POS ticket save error:', submitError);
+      if (printWindow && !printWindow.closed) {
+        printWindow.close();
+      }
       setError(submitError.message || 'Failed to complete ticket.');
     } finally {
       setSavingOrder(false);
@@ -992,50 +1048,6 @@ export default function AdminPOSPage() {
                   )}
                 </div>
               </div>
-
-              {pendingReceiptTicket ? (
-                <div className="bg-white rounded-lg shadow border-2 border-blue-200 p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-blue-600">Payment complete</p>
-                      <h3 className="text-xl font-semibold mt-1">Print receipt for ticket #{pendingReceiptTicket.ticketNumber}</h3>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {pendingReceiptTicket.location} • {pendingReceiptTicket.paymentSummary} • {formatMoney(pendingReceiptTicket.total)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await printReceipt(pendingReceiptTicket);
-                            setPendingReceiptTicketId(null);
-                            setMessage(`Ticket #${pendingReceiptTicket.ticketNumber} printed successfully.`);
-                            setError('');
-                          } catch (printError) {
-                            console.error('POS receipt print error:', printError);
-                            setError(printError.message || 'Unable to print receipt.');
-                          }
-                        }}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700"
-                      >
-                        Print Receipt
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPendingReceiptTicketId(null);
-                          setMessage(`Ticket #${pendingReceiptTicket.ticketNumber} saved without printing.`);
-                          setError('');
-                        }}
-                        className="border border-gray-300 bg-white px-4 py-2 rounded-lg font-semibold text-gray-700 hover:bg-gray-50"
-                      >
-                        Done
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
 
               {activeCompletedTicket ? (
                 <div className="bg-white rounded-lg shadow p-4">
@@ -1278,7 +1290,7 @@ export default function AdminPOSPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={handleCompleteTicket}
+                    onClick={openPaymentDialog}
                     disabled={savingOrder}
                     className="bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-60"
                   >
@@ -1403,6 +1415,114 @@ export default function AdminPOSPage() {
             </div>
           )}
         </div>
+
+        {paymentDialogOpen && activeTicket ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-blue-600">Take payment</p>
+                  <h3 className="text-xl font-bold text-gray-900 mt-1">Ticket #{activeTicket.ticketNumber}</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Total due: <span className="font-semibold text-gray-900">{formatMoney(ticketTotals.total)}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closePaymentDialog}
+                  disabled={savingOrder}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-sm font-semibold text-gray-700">Payment method</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {activeTicket.isSplitPayment ? 'Split payment' : activeTicket.paymentMethod === 'cash' ? 'Cash' : 'Card'}
+                  </p>
+                </div>
+
+                {isCashPaymentFlow ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Cash received</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={cashReceived}
+                        onChange={(e) => setCashReceived(e.target.value)}
+                        placeholder="Enter cash amount"
+                        className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-700"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-gray-200 p-3">
+                        <p className="text-xs text-gray-500">Charge</p>
+                        <p className="text-lg font-bold text-gray-900 mt-1">{formatMoney(ticketTotals.total)}</p>
+                      </div>
+                      <div className="rounded-xl border border-green-200 bg-green-50 p-3">
+                        <p className="text-xs text-green-700">Return</p>
+                        <p className="text-lg font-bold text-green-700 mt-1">{formatMoney(cashChangeDue)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div>
+                  <p className="block text-sm font-semibold text-gray-700 mb-2">Print receipt?</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPrintReceiptOnPayment(true)}
+                      className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                        printReceiptOnPayment ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-white text-gray-700'
+                      }`}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrintReceiptOnPayment(false)}
+                      className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                        !printReceiptOnPayment ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 bg-white text-gray-700'
+                      }`}
+                    >
+                      No
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={closePaymentDialog}
+                  disabled={savingOrder}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleCompleteTicket({
+                      shouldPrintReceipt: printReceiptOnPayment,
+                      cashTendered: cashReceived,
+                    })
+                  }
+                  disabled={savingOrder || (isCashPaymentFlow && cashReceivedAmount + 0.001 < ticketTotals.total)}
+                  className="rounded-lg bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60"
+                >
+                  {savingOrder ? 'Processing...' : 'Confirm Payment'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
 
       </AdminLayout>
