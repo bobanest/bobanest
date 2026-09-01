@@ -8,6 +8,7 @@ const NAV_GROUPS = [
     links: [
       { href: '/admin/analytics', label: 'Analytics' },
       { href: '/admin/orders', label: 'Orders' },
+      { href: '/admin/POS', label: 'POS' },
       { href: '/admin/notify', label: '🔔 Order Alerts (iPad)' },
       { href: '/admin/customers', label: 'Customers' },
       { href: '/admin/walkin', label: 'Walk-in Log' },
@@ -170,8 +171,11 @@ function MobileMenu({ open, onClose }) {
   );
 }
 
-export default function AdminLayout({ children }) {
+export default function AdminLayout({ children, hideHeader = false }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  if (hideHeader) {
+    return <main>{children}</main>;
+  }
   return (
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-dark text-white px-4 md:px-6 py-3 shadow-md">
@@ -214,3 +218,5 @@ export default function AdminLayout({ children }) {
     </div>
   );
 }
+
+

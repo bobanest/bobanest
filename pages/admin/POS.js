@@ -100,8 +100,9 @@ export default function AdminPOSPage() {
 
   const [loading, setLoading] = useState(true);
   const [savingOrder, setSavingOrder] = useState(false);
-  const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [posLogo, setPosLogo] = useState('/favicon.ico');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -167,6 +168,23 @@ export default function AdminPOSPage() {
       document.removeEventListener('fullscreenchange', onFullscreenChange);
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      const savedLogo = localStorage.getItem('bobanest-pos-logo');
+      if (savedLogo) setPosLogo(savedLogo);
+    } catch (error) {
+      console.warn('Unable to read saved POS logo', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bobanest-pos-logo', posLogo);
+    } catch (error) {
+      console.warn('Unable to save POS logo', error);
+    }
+  }, [posLogo]);
 
   const defaultLocation = useMemo(() => {
     const selectable = locations.filter((location) => !location.isComingSoon);
@@ -327,7 +345,17 @@ export default function AdminPOSPage() {
     setSelectedCategory('');
     setSelectedProductId('');
     setSelectedModifierOptions({});
-    setShowReceiptPreview(false);
+  };
+
+  const voidTicket = () => {
+    if (!activeTicket) return;
+    setTickets((prev) => prev.filter((ticket) => ticket.id !== activeTicket.id));
+    setActiveTicketId(null);
+    setSelectedCategory('');
+    setSelectedProductId('');
+    setSelectedModifierOptions({});
+    setError('');
+    setMessage(`Ticket #${activeTicket.ticketNumber} voided.`);
   };
 
   const handleSelectProduct = (product) => {
@@ -339,6 +367,7 @@ export default function AdminPOSPage() {
     if (groups.length === 0) {
       addLineToActiveTicket(buildLineFromSelection(product, [], {}));
       setSelectedProductId('');
+      setSelectedModifierOptions({});
       setMessage(`Added ${product.name}`);
     }
   };
@@ -362,29 +391,9 @@ export default function AdminPOSPage() {
 
     const line = buildLineFromSelection(selectedProduct, selectedProductModifierGroups, nextSelection);
     addLineToActiveTicket(line);
+    setSelectedProductId('');
     setSelectedModifierOptions({});
     setMessage(`Added ${selectedProduct.name}`);
-  };
-
-  const openReceiptPreview = () => {
-    if (!activeTicket) return;
-    setError('');
-    setMessage('');
-
-    if (activeTicket.lines.length === 0) {
-      setError('Add at least one item before completing this ticket.');
-      return;
-    }
-
-    if (activeTicket.isSplitPayment) {
-      const difference = Math.abs(splitPaidTotal - ticketTotals.total);
-      if (difference > 0.01) {
-        setError(`Split payment must equal total (${formatMoney(ticketTotals.total)}).`);
-        return;
-      }
-    }
-
-    setShowReceiptPreview(true);
   };
 
   const handleCompleteTicket = async () => {
@@ -475,7 +484,6 @@ export default function AdminPOSPage() {
       setSelectedCategory('');
       setSelectedProductId('');
       setSelectedModifierOptions({});
-      setShowReceiptPreview(false);
       setMessage(`Ticket ${activeTicket.ticketNumber} completed. Inventory deductions processed: ${body?.deductions ?? 0}.`);
     } catch (submitError) {
       console.error('POS ticket save error:', submitError);
@@ -487,21 +495,57 @@ export default function AdminPOSPage() {
 
   return (
     <ProtectedRoute>
-      <AdminLayout>
+      <AdminLayout hideHeader={Boolean(activeTicket)}>
         <div className="p-4 md:p-6 lg:p-8">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-3">
-              <img src="/favicon.ico" alt="Bobanest" className="w-8 h-8 rounded" />
+              <img src={posLogo} alt="Bobanest" className="w-8 h-8 rounded" />
               <h1 className="text-2xl md:text-3xl font-bold">Bobanest</h1>
             </div>
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="border rounded-lg px-4 py-2 text-sm font-medium bg-white hover:bg-gray-50"
-            >
-              {isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowSettings((value) => !value)}
+                className="border rounded-lg px-3 py-2 text-sm font-medium bg-white hover:bg-gray-50"
+              >
+                POS Logo
+              </button>
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="border rounded-lg px-4 py-2 text-sm font-medium bg-white hover:bg-gray-50"
+              >
+                {isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+              </button>
+            </div>
           </div>
+
+          {showSettings ? (
+            <div className="mb-4 rounded-lg bg-white p-4 shadow">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">POS branding</h2>
+                  <p className="text-sm text-gray-500">Upload a logo for the POS screen.</p>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const result = typeof reader.result === 'string' ? reader.result : '/favicon.ico';
+                      setPosLogo(result);
+                      setMessage('POS logo updated.');
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                  className="block text-sm text-gray-600"
+                />
+              </div>
+            </div>
+          ) : null}
 
           {error ? <div className="mb-4 rounded-lg bg-red-100 text-red-700 px-4 py-3 text-sm">{error}</div> : null}
           {message ? <div className="mb-4 rounded-lg bg-green-100 text-green-700 px-4 py-3 text-sm">{message}</div> : null}
@@ -714,14 +758,24 @@ export default function AdminPOSPage() {
                   />
                 </div>
 
-                <button
-                  type="button"
-                  onClick={openReceiptPreview}
-                  disabled={savingOrder}
-                  className="mt-4 w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-60"
-                >
-                  Preview Receipt
-                </button>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={voidTicket}
+                    disabled={savingOrder}
+                    className="bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-60"
+                  >
+                    Void Ticket
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCompleteTicket}
+                    disabled={savingOrder}
+                    className="bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-60"
+                  >
+                    {savingOrder ? 'Closing...' : 'Close Ticket'}
+                  </button>
+                </div>
               </div>
 
               <div className="bg-white rounded-lg shadow p-4 space-y-4">
@@ -841,77 +895,9 @@ export default function AdminPOSPage() {
           )}
         </div>
 
-        {showReceiptPreview && activeTicket ? (
-          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl">
-              <div className="p-5 border-b">
-                <div className="flex items-center gap-2">
-                  <img src="/favicon.ico" alt="Bobanest" className="w-6 h-6 rounded" />
-                  <h3 className="text-lg font-bold">Bobanest Receipt (Printer Copy)</h3>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Ticket #{activeTicket.ticketNumber}</p>
-              </div>
 
-              <div className="p-5 max-h-[65vh] overflow-y-auto text-sm">
-                <div className="space-y-1 mb-3">
-                  <p><strong>Location:</strong> {selectedLocation || defaultLocation || 'N/A'}</p>
-                  <p><strong>Date:</strong> {new Date().toLocaleString()}</p>
-                </div>
-
-                <div className="border rounded-lg divide-y">
-                  {activeTicket.lines.map((line) => (
-                    <div key={line.lineKey} className="p-3">
-                      <div className="flex justify-between gap-3">
-                        <p>{line.quantity} x {line.productName}</p>
-                        <p>{formatMoney(line.unitPrice * line.quantity)}</p>
-                      </div>
-                      {line.modifiers.length > 0 ? (
-                        <p className="text-xs text-gray-500 mt-1">
-                          {line.modifiers.map((mod) => `${mod.groupName}: ${mod.options.join(', ')}`).join(' • ')}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 space-y-1">
-                  <div className="flex justify-between"><span>Subtotal</span><span>{formatMoney(ticketTotals.subtotal)}</span></div>
-                  <div className="flex justify-between"><span>Tax</span><span>{formatMoney(ticketTotals.tax)}</span></div>
-                  <div className="flex justify-between font-bold"><span>Total</span><span>{formatMoney(ticketTotals.total)}</span></div>
-                </div>
-
-                <div className="mt-4">
-                  <p><strong>Payment:</strong> {
-                    activeTicket.isSplitPayment
-                      ? `Split - Cash ${formatMoney(activeTicket.splitCash || 0)}, Card ${formatMoney(activeTicket.splitCard || 0)}`
-                      : activeTicket.paymentMethod
-                  }</p>
-                  {activeTicket.orderNote ? <p className="mt-1"><strong>Note:</strong> {activeTicket.orderNote}</p> : null}
-                </div>
-              </div>
-
-              <div className="p-5 border-t flex gap-2 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowReceiptPreview(false)}
-                  className="px-4 py-2 rounded border text-sm"
-                  disabled={savingOrder}
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCompleteTicket}
-                  className="px-4 py-2 rounded bg-green-600 text-white text-sm font-semibold hover:bg-green-700 disabled:opacity-60"
-                  disabled={savingOrder}
-                >
-                  {savingOrder ? 'Closing...' : 'Print & Close Ticket'}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </AdminLayout>
     </ProtectedRoute>
   );
 }
+
