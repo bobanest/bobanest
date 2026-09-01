@@ -78,6 +78,7 @@ const NAV_GROUPS = [
     links: [
       { href: '/admin/store-hours', label: 'Store Hours' },
       { href: '/admin/locations', label: 'Pickup Locations' },
+      { href: '/admin/pos-branding', label: 'POS Logo' },
     ],
   },
 ];

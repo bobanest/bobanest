@@ -101,7 +101,6 @@ export default function AdminPOSPage() {
   const [loading, setLoading] = useState(true);
   const [savingOrder, setSavingOrder] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [posLogo, setPosLogo] = useState('/favicon.ico');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -505,13 +504,6 @@ export default function AdminPOSPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setShowSettings((value) => !value)}
-                className="border rounded-lg px-3 py-2 text-sm font-medium bg-white hover:bg-gray-50"
-              >
-                POS Logo
-              </button>
-              <button
-                type="button"
                 onClick={toggleFullscreen}
                 className="border rounded-lg px-4 py-2 text-sm font-medium bg-white hover:bg-gray-50"
               >
@@ -519,33 +511,6 @@ export default function AdminPOSPage() {
               </button>
             </div>
           </div>
-
-          {showSettings ? (
-            <div className="mb-4 rounded-lg bg-white p-4 shadow">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold">POS branding</h2>
-                  <p className="text-sm text-gray-500">Upload a logo for the POS screen.</p>
-                </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      const result = typeof reader.result === 'string' ? reader.result : '/favicon.ico';
-                      setPosLogo(result);
-                      setMessage('POS logo updated.');
-                    };
-                    reader.readAsDataURL(file);
-                  }}
-                  className="block text-sm text-gray-600"
-                />
-              </div>
-            </div>
-          ) : null}
 
           {error ? <div className="mb-4 rounded-lg bg-red-100 text-red-700 px-4 py-3 text-sm">{error}</div> : null}
           {message ? <div className="mb-4 rounded-lg bg-green-100 text-green-700 px-4 py-3 text-sm">{message}</div> : null}
