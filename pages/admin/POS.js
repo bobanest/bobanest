@@ -120,22 +120,75 @@ export default function AdminPOSPage() {
   const [allowFullscreenExit, setAllowFullscreenExit] = useState(false);
   const [fullscreenPasscode, setFullscreenPasscode] = useState('');
   const [posLogo, setPosLogo] = useState('/favicon.ico');
+  const [runtimeHydrated, setRuntimeHydrated] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(POS_STATE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed.tickets)) setTickets(parsed.tickets);
-      if (Array.isArray(parsed.completedTickets)) setCompletedTickets(parsed.completedTickets);
-      if (typeof parsed.activeTicketId === 'string') setActiveTicketId(parsed.activeTicketId);
-      if (typeof parsed.selectedLocation === 'string') setSelectedLocation(parsed.selectedLocation);
-      if (typeof parsed.activeCompletedTicketId === 'string') setActiveCompletedTicketId(parsed.activeCompletedTicketId);
-    } catch (storageError) {
-      console.warn('Unable to restore POS state', storageError);
-    }
+    let cancelled = false;
+
+    const applyRuntimeState = (state) => {
+      if (!state || typeof state !== 'object') return;
+      if (Array.isArray(state.tickets)) setTickets(state.tickets);
+      if (Array.isArray(state.completedTickets)) setCompletedTickets(state.completedTickets);
+      if (typeof state.activeTicketId === 'string') setActiveTicketId(state.activeTicketId || null);
+      if (typeof state.selectedLocation === 'string') setSelectedLocation(state.selectedLocation);
+      if (typeof state.activeCompletedTicketId === 'string') {
+        setActiveCompletedTicketId(state.activeCompletedTicketId || null);
+      }
+    };
+
+    const loadInitialState = async () => {
+      try {
+        const rawState = localStorage.getItem(POS_STATE_KEY);
+        if (rawState) {
+          const parsed = JSON.parse(rawState);
+          applyRuntimeState(parsed);
+        }
+      } catch (storageError) {
+        console.warn('Unable to restore local POS state', storageError);
+      }
+
+      try {
+        const savedLogo = localStorage.getItem('bobanest-pos-logo');
+        if (savedLogo) setPosLogo(savedLogo);
+      } catch (storageError) {
+        console.warn('Unable to read saved POS logo', storageError);
+      }
+
+      try {
+        const response = await fetch('/api/admin/pos-settings');
+        const text = await response.text();
+        if (!response.ok) throw new Error(`Failed to load POS settings (${response.status})`);
+        const body = text ? JSON.parse(text) : {};
+        if (cancelled) return;
+
+        if (typeof body.posLogo === 'string' && body.posLogo.trim()) {
+          setPosLogo(body.posLogo);
+          try {
+            localStorage.setItem('bobanest-pos-logo', body.posLogo);
+          } catch (storageError) {
+            console.warn('Unable to cache POS logo locally', storageError);
+          }
+        }
+        if (typeof body.fullscreenPasscode === 'string') {
+          setFullscreenPasscode(body.fullscreenPasscode);
+        }
+        if (body.posRuntimeState && typeof body.posRuntimeState === 'object') {
+          applyRuntimeState(body.posRuntimeState);
+        }
+      } catch (loadError) {
+        if (cancelled) return;
+        console.warn('Unable to load POS settings', loadError);
+      } finally {
+        if (!cancelled) setRuntimeHydrated(true);
+      }
+    };
+
+    loadInitialState();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -194,64 +247,29 @@ export default function AdminPOSPage() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const loadPosSettings = async () => {
-      try {
-        const response = await fetch('/api/admin/pos-settings');
-        const text = await response.text();
-        if (!response.ok) throw new Error(`Failed to load POS settings (${response.status})`);
-        const body = text ? JSON.parse(text) : {};
-        if (cancelled) return;
-
-        if (typeof body.posLogo === 'string' && body.posLogo.trim()) {
-          setPosLogo(body.posLogo);
-          try {
-            localStorage.setItem('bobanest-pos-logo', body.posLogo);
-          } catch (storageError) {
-            console.warn('Unable to save POS logo locally', storageError);
-          }
-        }
-        if (typeof body.fullscreenPasscode === 'string') {
-          setFullscreenPasscode(body.fullscreenPasscode);
-        }
-      } catch (loadError) {
-        if (cancelled) return;
-        console.warn('Unable to load POS settings', loadError);
-      }
+    if (!runtimeHydrated) return;
+    const runtimeState = {
+      tickets,
+      completedTickets,
+      activeTicketId: activeTicketId || '',
+      selectedLocation,
+      activeCompletedTicketId: activeCompletedTicketId || '',
     };
 
-    loadPosSettings();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     try {
-      localStorage.setItem(
-        POS_STATE_KEY,
-        JSON.stringify({
-          tickets,
-          completedTickets,
-          activeTicketId: activeTicketId || '',
-          selectedLocation,
-          activeCompletedTicketId: activeCompletedTicketId || '',
-        })
-      );
+      localStorage.setItem(POS_STATE_KEY, JSON.stringify(runtimeState));
     } catch (storageError) {
       console.warn('Unable to persist POS state', storageError);
     }
-  }, [tickets, completedTickets, activeTicketId, selectedLocation, activeCompletedTicketId]);
 
-  useEffect(() => {
-    try {
-      const savedLogo = localStorage.getItem('bobanest-pos-logo');
-      if (savedLogo) setPosLogo(savedLogo);
-    } catch (storageError) {
-      console.warn('Unable to read saved POS logo', storageError);
-    }
-  }, []);
+    fetch('/api/admin/pos-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'posRuntimeState', value: runtimeState }),
+    }).catch((syncError) => {
+      console.warn('Unable to sync POS state to server', syncError);
+    });
+  }, [runtimeHydrated, tickets, completedTickets, activeTicketId, selectedLocation, activeCompletedTicketId]);
 
   useEffect(() => {
     const onFullscreenChange = () => {
