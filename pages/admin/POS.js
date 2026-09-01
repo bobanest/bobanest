@@ -19,6 +19,78 @@ function formatMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildReceiptHtml(ticket, printerSettings) {
+  const lines = Array.isArray(ticket?.lines) ? ticket.lines : [];
+  const printedAt = new Date().toLocaleString();
+  const printerLabel = printerSettings?.printerName ? `Printer: ${printerSettings.printerName}` : '';
+
+  const lineMarkup = lines.map((line) => {
+    const modifierText = Array.isArray(line.modifiers) && line.modifiers.length > 0
+      ? `<div class="mods">${line.modifiers.map((mod) => `${escapeHtml(mod.groupName)}: ${escapeHtml((mod.options || []).join(', '))}`).join(' • ')}</div>`
+      : '';
+    return `
+      <div class="line">
+        <div class="row">
+          <span>${escapeHtml(line.quantity)} x ${escapeHtml(line.productName)}</span>
+          <span>${escapeHtml(formatMoney(Number(line.unitPrice || 0) * Number(line.quantity || 0)))}</span>
+        </div>
+        ${modifierText}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Receipt ${escapeHtml(ticket.ticketNumber)}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 0; padding: 16px; color: #111827; }
+          .receipt { max-width: 360px; margin: 0 auto; }
+          .center { text-align: center; }
+          .muted { color: #6b7280; font-size: 12px; }
+          .line { border-bottom: 1px dashed #d1d5db; padding: 8px 0; }
+          .row { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+          .mods { color: #6b7280; font-size: 12px; margin-top: 4px; }
+          .totals { margin-top: 12px; border-top: 2px solid #111827; padding-top: 12px; }
+          .totals .row { margin-bottom: 6px; }
+          .strong { font-weight: 700; }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <div class="center">
+            <h2>Bobanest</h2>
+            <div class="muted">Ticket #${escapeHtml(ticket.ticketNumber)}</div>
+            <div class="muted">${escapeHtml(ticket.location || 'N/A')}</div>
+            <div class="muted">${escapeHtml(printedAt)}</div>
+            ${printerLabel ? `<div class="muted">${escapeHtml(printerLabel)}</div>` : ''}
+          </div>
+          <div>${lineMarkup}</div>
+          <div class="totals">
+            <div class="row"><span>Subtotal</span><span>${escapeHtml(formatMoney(ticket.subtotal || 0))}</span></div>
+            <div class="row"><span>Discount</span><span>-${escapeHtml(formatMoney(ticket.discountAmount || 0))}</span></div>
+            <div class="row"><span>Tax</span><span>${escapeHtml(formatMoney(ticket.tax || 0))}</span></div>
+            <div class="row strong"><span>Total</span><span>${escapeHtml(formatMoney(ticket.total || 0))}</span></div>
+            <div class="row"><span>Payment</span><span>${escapeHtml(ticket.paymentSummary || '')}</span></div>
+            ${ticket.orderNote ? `<div class="muted" style="margin-top:8px;">Note: ${escapeHtml(ticket.orderNote)}</div>` : ''}
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+}
+
 function buildLineFromSelection(product, groups, selectedOptions) {
   let additional = 0;
   const modifiers = [];
@@ -119,6 +191,12 @@ export default function AdminPOSPage() {
   const [passcodeApprovedExit, setPasscodeApprovedExit] = useState(false);
   const [fullscreenPasscode, setFullscreenPasscode] = useState('');
   const [posLogo, setPosLogo] = useState('/favicon.ico');
+  const [printerSettings, setPrinterSettings] = useState({
+    mode: 'browser',
+    printerName: '',
+    ipAddress: '',
+    printCopies: 1,
+  });
   const [runtimeHydrated, setRuntimeHydrated] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -156,6 +234,16 @@ export default function AdminPOSPage() {
       }
 
       try {
+        const savedPrinterSettings = localStorage.getItem('bobanest-pos-printer');
+        if (savedPrinterSettings) {
+          const parsedPrinterSettings = JSON.parse(savedPrinterSettings);
+          setPrinterSettings((current) => ({ ...current, ...parsedPrinterSettings }));
+        }
+      } catch (storageError) {
+        console.warn('Unable to read saved printer settings', storageError);
+      }
+
+      try {
         const response = await fetch('/api/admin/pos-settings');
         const text = await response.text();
         if (!response.ok) throw new Error(`Failed to load POS settings (${response.status})`);
@@ -172,6 +260,9 @@ export default function AdminPOSPage() {
         }
         if (typeof body.fullscreenPasscode === 'string') {
           setFullscreenPasscode(body.fullscreenPasscode);
+        }
+        if (body.posPrinterSettings && typeof body.posPrinterSettings === 'object') {
+          setPrinterSettings((current) => ({ ...current, ...body.posPrinterSettings }));
         }
         if (body.posRuntimeState && typeof body.posRuntimeState === 'object') {
           applyRuntimeState(body.posRuntimeState);
@@ -322,6 +413,36 @@ export default function AdminPOSPage() {
     () => completedTickets.find((ticket) => ticket.id === activeCompletedTicketId) || null,
     [completedTickets, activeCompletedTicketId]
   );
+
+  const printReceipt = async (ticket, preparedWindow = null) => {
+    if (!ticket) {
+      throw new Error('No ticket available to print.');
+    }
+
+    const popup = preparedWindow || window.open('', '_blank', 'width=420,height=800');
+    if (!popup) {
+      throw new Error('The print window was blocked. Please allow popups for Bobanest POS.');
+    }
+
+    popup.document.open();
+    popup.document.write(buildReceiptHtml(ticket, printerSettings));
+    popup.document.close();
+    popup.focus();
+
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
+
+    const copies = Math.max(1, Number(printerSettings.printCopies || 1));
+    for (let copyIndex = 0; copyIndex < copies; copyIndex += 1) {
+      popup.print();
+      if (copyIndex < copies - 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+      }
+    }
+
+    window.setTimeout(() => {
+      popup.close();
+    }, 600);
+  };
 
   const filteredProducts = useMemo(() => {
     if (!activeTicket) return [];
@@ -633,6 +754,9 @@ export default function AdminPOSPage() {
       }
     }
 
+    const shouldTriggerPrint = ['browser', 'network', 'bluetooth'].includes(String(printerSettings.mode || 'browser'));
+    const printWindow = shouldTriggerPrint ? window.open('', '_blank', 'width=420,height=800') : null;
+
     setSavingOrder(true);
     setError('');
     setMessage('');
@@ -728,9 +852,23 @@ export default function AdminPOSPage() {
       setSelectedCategory('');
       setSelectedProductId('');
       setSelectedModifierOptions({});
-      setMessage(`Ticket ${activeTicket.ticketNumber} completed. Payment recorded.`);
+
+      if (shouldTriggerPrint) {
+        try {
+          await printReceipt(completedRecord, printWindow);
+          setMessage(`Ticket ${activeTicket.ticketNumber} completed and sent to print.`);
+        } catch (printError) {
+          console.error('POS receipt print error:', printError);
+          setMessage(`Ticket ${activeTicket.ticketNumber} completed, but receipt printing needs browser permission or printer selection.`);
+        }
+      } else {
+        setMessage(`Ticket ${activeTicket.ticketNumber} completed. Payment recorded.`);
+      }
     } catch (submitError) {
       console.error('POS ticket save error:', submitError);
+      if (printWindow && !printWindow.closed) {
+        printWindow.close();
+      }
       setError(submitError.message || 'Failed to complete ticket.');
     } finally {
       setSavingOrder(false);
@@ -898,6 +1036,22 @@ export default function AdminPOSPage() {
                   </div>
 
                   <div className="mt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await printReceipt(activeCompletedTicket);
+                          setMessage(`Ticket #${activeCompletedTicket.ticketNumber} sent to print.`);
+                          setError('');
+                        } catch (printError) {
+                          console.error('POS reprint error:', printError);
+                          setError(printError.message || 'Unable to print receipt.');
+                        }
+                      }}
+                      className="bg-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-blue-700"
+                    >
+                      Reprint Receipt
+                    </button>
                     <button
                       type="button"
                       onClick={handleRefundCompletedTicket}

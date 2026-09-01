@@ -72,26 +72,73 @@ export default function PrinterSetupPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('bobanest-pos-printer');
-      if (!saved) return;
-      const parsed = JSON.parse(saved);
-      const next = { ...DEFAULT_SETTINGS, ...parsed };
-      setSettings(next);
-      setNetworkPrefix(parseNetworkPrefix(next.ipAddress));
-    } catch (loadError) {
-      console.warn('Unable to load saved printer settings', loadError);
-    }
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      try {
+        const saved = localStorage.getItem('bobanest-pos-printer');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const next = { ...DEFAULT_SETTINGS, ...parsed };
+          if (!cancelled) {
+            setSettings(next);
+            setNetworkPrefix(parseNetworkPrefix(next.ipAddress));
+          }
+        }
+      } catch (loadError) {
+        console.warn('Unable to load saved printer settings', loadError);
+      }
+
+      try {
+        const response = await fetch('/api/admin/pos-settings');
+        const text = await response.text();
+        if (!response.ok) throw new Error(`Unable to load printer settings (${response.status})`);
+        const body = text ? JSON.parse(text) : {};
+        const serverSettings = body.posPrinterSettings;
+        if (!cancelled && serverSettings && typeof serverSettings === 'object') {
+          const next = { ...DEFAULT_SETTINGS, ...serverSettings };
+          setSettings(next);
+          setNetworkPrefix(parseNetworkPrefix(next.ipAddress));
+          localStorage.setItem('bobanest-pos-printer', JSON.stringify(next));
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          console.warn('Unable to load shared printer settings', loadError);
+        }
+      }
+    };
+
+    loadSettings();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const saveSettings = (nextSettings = settings, successText = 'Printer settings saved.') => {
+  const saveSettings = async (nextSettings = settings, successText = 'Printer settings saved.') => {
     try {
       localStorage.setItem('bobanest-pos-printer', JSON.stringify(nextSettings));
+      const response = await fetch('/api/admin/pos-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'posPrinterSettings', value: nextSettings }),
+      });
+      const text = await response.text();
+      let body = {};
+      if (text) {
+        try {
+          body = JSON.parse(text);
+        } catch {
+          body = {};
+        }
+      }
+      if (!response.ok) {
+        throw new Error(body?.error || `Unable to save printer settings (${response.status})`);
+      }
       setMessage(successText);
       setError('');
     } catch (saveError) {
       console.warn('Unable to save printer settings', saveError);
-      setError('Unable to save printer settings in this browser.');
+      setError(saveError.message || 'Unable to save printer settings.');
     }
   };
 
