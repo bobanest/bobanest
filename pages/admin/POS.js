@@ -116,8 +116,7 @@ export default function AdminPOSPage() {
   const [savingOrder, setSavingOrder] = useState(false);
   const [processingRefund, setProcessingRefund] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [fullscreenGuardEnabled, setFullscreenGuardEnabled] = useState(false);
-  const [allowFullscreenExit, setAllowFullscreenExit] = useState(false);
+  const [passcodeApprovedExit, setPasscodeApprovedExit] = useState(false);
   const [fullscreenPasscode, setFullscreenPasscode] = useState('');
   const [posLogo, setPosLogo] = useState('/favicon.ico');
   const [runtimeHydrated, setRuntimeHydrated] = useState(false);
@@ -272,15 +271,21 @@ export default function AdminPOSPage() {
   }, [runtimeHydrated, tickets, completedTickets, activeTicketId, selectedLocation, activeCompletedTicketId]);
 
   useEffect(() => {
+    const requiredPasscode = String(fullscreenPasscode || '').trim();
     const onFullscreenChange = () => {
       const inFullscreen = Boolean(document.fullscreenElement);
       setIsFullscreen(inFullscreen);
 
-      if (!inFullscreen && fullscreenGuardEnabled && fullscreenPasscode && !allowFullscreenExit) {
+      if (!inFullscreen && passcodeApprovedExit) {
+        setPasscodeApprovedExit(false);
+        return;
+      }
+
+      if (!inFullscreen && requiredPasscode) {
         const entered = window.prompt('Enter POS passcode to exit full screen');
-        if (entered === fullscreenPasscode) {
-          setFullscreenGuardEnabled(false);
+        if (entered === requiredPasscode) {
           setError('');
+          setPasscodeApprovedExit(false);
           return;
         }
         setError('Passcode required to exit full screen.');
@@ -294,7 +299,7 @@ export default function AdminPOSPage() {
     return () => {
       document.removeEventListener('fullscreenchange', onFullscreenChange);
     };
-  }, [fullscreenGuardEnabled, fullscreenPasscode, allowFullscreenExit]);
+  }, [fullscreenPasscode, passcodeApprovedExit]);
 
   useEffect(() => {
     try {
@@ -407,28 +412,26 @@ export default function AdminPOSPage() {
   };
 
   const toggleFullscreen = async () => {
+    const requiredPasscode = String(fullscreenPasscode || '').trim();
     try {
       if (document.fullscreenElement) {
-        if (fullscreenGuardEnabled && fullscreenPasscode) {
+        if (requiredPasscode) {
           const entered = window.prompt('Enter POS passcode to exit full screen');
-          if (entered !== fullscreenPasscode) {
+          if (entered !== requiredPasscode) {
             setError('Passcode required to exit full screen.');
             return;
           }
         }
-        setAllowFullscreenExit(true);
-        setFullscreenGuardEnabled(false);
+        setPasscodeApprovedExit(true);
         await document.exitFullscreen();
-        setAllowFullscreenExit(false);
       } else {
         await document.documentElement.requestFullscreen();
-        setFullscreenGuardEnabled(Boolean(fullscreenPasscode));
         setError('');
       }
     } catch (fullscreenError) {
       console.error('Fullscreen toggle failed:', fullscreenError);
       setError('Unable to change fullscreen mode on this device/browser.');
-      setAllowFullscreenExit(false);
+      setPasscodeApprovedExit(false);
     }
   };
 
