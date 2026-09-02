@@ -79,7 +79,6 @@ const NAV_GROUPS = [
       { href: '/admin/store-hours', label: 'Store Hours' },
       { href: '/admin/locations', label: 'Pickup Locations' },
       { href: '/admin/pos-branding', label: 'POS Logo' },
-      { href: '/admin/pos-security', label: 'POS Passcode' },
       { href: '/admin/printer-setup', label: 'Printer Setup' },
     ],
   },
@@ -221,4 +220,5 @@ export default function AdminLayout({ children, hideHeader = false }) {
     </div>
   );
 }
+
 

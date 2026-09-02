@@ -200,6 +200,11 @@ export default function AdminPOSPage() {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [cashReceived, setCashReceived] = useState('');
   const [printReceiptOnPayment, setPrintReceiptOnPayment] = useState(true);
+  const [completedSearch, setCompletedSearch] = useState('');
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
+  const [refundPasscode, setRefundPasscode] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [printerTestStatus, setPrinterTestStatus] = useState('');
   const [runtimeHydrated, setRuntimeHydrated] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -502,6 +507,39 @@ export default function AdminPOSPage() {
   const isCashPaymentFlow = Boolean(activeTicket && !activeTicket.isSplitPayment && activeTicket.paymentMethod === 'cash');
   const cashReceivedAmount = Number(cashReceived || 0);
   const cashChangeDue = Math.max(0, cashReceivedAmount - ticketTotals.total);
+  const printerModeLabel = {
+    browser: 'Browser print dialog',
+    network: 'Network printer',
+    bluetooth: 'Bluetooth printer',
+    manual: 'Manual printer',
+  }[printerSettings.mode] || 'Printer not configured';
+  const printerConfigured = printerSettings.mode === 'browser'
+    ? true
+    : Boolean(printerSettings.printerName || printerSettings.ipAddress);
+  const todayKey = new Date().toDateString();
+  const todayCompletedTickets = completedTickets.filter((ticket) => {
+    const completedAt = ticket.completedAt ? new Date(ticket.completedAt) : null;
+    return completedAt && completedAt.toString() !== 'Invalid Date' && completedAt.toDateString() === todayKey;
+  });
+  const shiftSummary = todayCompletedTickets.reduce((summary, ticket) => {
+    const payment = String(ticket.paymentSummary || '').toLowerCase();
+    const total = Number(ticket.total || 0);
+    const refunded = ticket.refundedAt ? total : 0;
+    summary.tickets += 1;
+    summary.gross += total;
+    summary.refunds += refunded;
+    summary.discounts += Number(ticket.discountAmount || 0);
+    if (payment.includes('cash')) summary.cash += Math.max(0, total - refunded);
+    else if (payment.includes('card')) summary.card += Math.max(0, total - refunded);
+    return summary;
+  }, { tickets: 0, gross: 0, refunds: 0, discounts: 0, cash: 0, card: 0 });
+  const shiftNet = Math.max(0, shiftSummary.gross - shiftSummary.refunds);
+  const filteredCompletedTickets = completedTickets.filter((ticket) => {
+    const query = completedSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [ticket.ticketNumber, ticket.location, ticket.paymentSummary, ticket.orderNote]
+      .some((value) => String(value || '').toLowerCase().includes(query));
+  });
 
   const splitPaidTotal = useMemo(() => {
     if (!activeTicket?.isSplitPayment) return 0;
@@ -650,6 +688,14 @@ export default function AdminPOSPage() {
       setError(`Ticket #${activeCompletedTicket.ticketNumber} is already refunded.`);
       return;
     }
+    if (!fullscreenPasscode) {
+      setError('Set a POS passcode in Settings before processing refunds.');
+      return;
+    }
+    if (refundPasscode !== fullscreenPasscode) {
+      setError('Manager passcode is required to refund this ticket.');
+      return;
+    }
 
     setProcessingRefund(true);
     setError('');
@@ -673,7 +719,7 @@ export default function AdminPOSPage() {
         body: JSON.stringify({
           date: new Date().toISOString(),
           items: refundItems,
-          note: `POS refund | ticket: ${activeCompletedTicket.ticketNumber} | location: ${activeCompletedTicket.location || 'N/A'}`,
+          note: `POS refund | ticket: ${activeCompletedTicket.ticketNumber} | location: ${activeCompletedTicket.location || 'N/A'} | reason: ${refundReason.trim()}`,
           source: 'manual',
           grossSales: -Math.abs(Number(activeCompletedTicket.subtotal || 0)),
           netSales: -Math.abs(Number(activeCompletedTicket.total || 0)),
@@ -699,16 +745,41 @@ export default function AdminPOSPage() {
       setCompletedTickets((prev) =>
         prev.map((ticket) =>
           ticket.id === activeCompletedTicket.id
-            ? { ...ticket, refundedAt, refundReference: body?._id || '' }
+            ? { ...ticket, refundedAt, refundReference: body?._id || '', refundReason: refundReason.trim() }
             : ticket
         )
       );
+      setRefundDialogOpen(false);
+      setRefundPasscode('');
+      setRefundReason('');
       setMessage(`Ticket #${activeCompletedTicket.ticketNumber} refunded successfully.`);
     } catch (refundError) {
       console.error('POS refund failed:', refundError);
       setError(refundError.message || 'Failed to refund ticket.');
     } finally {
       setProcessingRefund(false);
+    }
+  };
+
+  const printTestReceipt = async () => {
+    setPrinterTestStatus('Printing test receipt...');
+    setError('');
+    try {
+      await printReceipt({
+        ticketNumber: 'TEST',
+        location: selectedLocation || defaultLocation || 'N/A',
+        lines: [{ quantity: 1, productName: 'Printer test receipt', unitPrice: 0, modifiers: [] }],
+        subtotal: 0,
+        discountAmount: 0,
+        tax: 0,
+        total: 0,
+        paymentSummary: 'Test print',
+      });
+      setPrinterTestStatus('Test receipt sent to the browser print flow.');
+    } catch (printError) {
+      console.error('POS printer test failed:', printError);
+      setPrinterTestStatus('');
+      setError(printError.message || 'Unable to print a test receipt.');
     }
   };
 
@@ -957,7 +1028,9 @@ export default function AdminPOSPage() {
               <div className="bg-white rounded-lg shadow p-6 flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-semibold">Tickets</h2>
-                  <p className="text-sm text-gray-500">Start a new ticket or continue an open ticket.</p>
+                  <p className="text-sm text-gray-500">
+                    {selectedLocation || 'No location selected'} • {printerConfigured ? printerModeLabel : 'Printer setup needed'}
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <select
@@ -983,6 +1056,50 @@ export default function AdminPOSPage() {
                   >
                     New Ticket
                   </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  ['Open tickets', tickets.length, 'text-blue-700'],
+                  ['Completed today', shiftSummary.tickets, 'text-green-700'],
+                  ['Today net sales', formatMoney(shiftNet), 'text-gray-900'],
+                  ['Printer', printerConfigured ? 'Ready' : 'Setup', printerConfigured ? 'text-green-700' : 'text-amber-700'],
+                ].map(([label, value, color]) => (
+                  <div key={label} className="bg-white rounded-lg shadow p-4">
+                    <p className="text-xs text-gray-500">{label}</p>
+                    <p className={`text-xl font-bold mt-1 ${color}`}>{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <button type="button" onClick={createTicket} className="rounded-lg bg-blue-600 text-white py-3 font-semibold hover:bg-blue-700">+ New Ticket</button>
+                <button type="button" onClick={() => document.getElementById('completed-tickets')?.scrollIntoView({ behavior: 'smooth' })} className="rounded-lg border bg-white py-3 font-semibold hover:bg-gray-50">Find Completed</button>
+                <button type="button" onClick={printTestReceipt} className="rounded-lg border bg-white py-3 font-semibold hover:bg-gray-50">Test Printer</button>
+                <button type="button" onClick={() => setMessage(`Shift net sales: ${formatMoney(shiftNet)}`)} className="rounded-lg border bg-white py-3 font-semibold hover:bg-gray-50">Shift Summary</button>
+              </div>
+              {printerTestStatus ? <p className="text-sm text-gray-600">{printerTestStatus}</p> : null}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-slate-900 text-white rounded-lg shadow p-4">
+                  <h3 className="font-semibold">Cashier information</h3>
+                  <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
+                    <div><p className="text-slate-400 text-xs">Location</p><p className="font-medium">{selectedLocation || 'Not selected'}</p></div>
+                    <div><p className="text-slate-400 text-xs">Printer</p><p className="font-medium">{printerConfigured ? printerModeLabel : 'Needs setup'}</p></div>
+                    <div><p className="text-slate-400 text-xs">Open tickets</p><p className="font-medium">{tickets.length}</p></div>
+                    <div><p className="text-slate-400 text-xs">Completed today</p><p className="font-medium">{shiftSummary.tickets}</p></div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg shadow p-4">
+                  <h3 className="font-semibold">Today’s summary</h3>
+                  <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
+                    <div className="flex justify-between"><span>Cash</span><strong>{formatMoney(shiftSummary.cash)}</strong></div>
+                    <div className="flex justify-between"><span>Card</span><strong>{formatMoney(shiftSummary.card)}</strong></div>
+                    <div className="flex justify-between"><span>Discounts</span><strong>-{formatMoney(shiftSummary.discounts)}</strong></div>
+                    <div className="flex justify-between"><span>Refunds</span><strong>-{formatMoney(shiftSummary.refunds)}</strong></div>
+                    <div className="col-span-2 border-t pt-2 flex justify-between font-bold"><span>Net sales</span><span>{formatMoney(shiftNet)}</span></div>
+                  </div>
                 </div>
               </div>
 
@@ -1013,13 +1130,25 @@ export default function AdminPOSPage() {
                   )}
                 </div>
 
-                <div className="bg-white rounded-lg shadow p-4">
-                  <h3 className="font-semibold mb-3">Completed Tickets</h3>
+                <div id="completed-tickets" className="bg-white rounded-lg shadow p-4">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <h3 className="font-semibold">Completed Tickets</h3>
+                    <span className="text-xs text-gray-500">{filteredCompletedTickets.length} shown</span>
+                  </div>
+                  <input
+                    type="search"
+                    value={completedSearch}
+                    onChange={(e) => setCompletedSearch(e.target.value)}
+                    placeholder="Search ticket, location, payment..."
+                    className="w-full border rounded-lg px-3 py-2 text-sm mb-3"
+                  />
                   {completedTickets.length === 0 ? (
                     <p className="text-sm text-gray-500">No completed tickets yet.</p>
+                  ) : filteredCompletedTickets.length === 0 ? (
+                    <p className="text-sm text-gray-500">No completed tickets match your search.</p>
                   ) : (
                     <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
-                      {completedTickets.map((ticket) => (
+                      {filteredCompletedTickets.map((ticket) => (
                         <button
                           key={ticket.id}
                           type="button"
@@ -1030,7 +1159,12 @@ export default function AdminPOSPage() {
                               : 'bg-gray-50 hover:bg-gray-100 border-gray-200'
                           }`}
                         >
-                          <p className="font-semibold text-sm">#{ticket.ticketNumber}</p>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-semibold text-sm">#{ticket.ticketNumber}</p>
+                            <span className={`text-[11px] font-semibold rounded-full px-2 py-0.5 ${
+                              ticket.refundedAt ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                            }`}>{ticket.refundedAt ? 'REFUNDED' : 'PAID'}</span>
+                          </div>
                           <p className="text-xs text-gray-600 mt-1">
                             {ticket.location} • {new Date(ticket.completedAt).toLocaleString()}
                           </p>
@@ -1106,7 +1240,11 @@ export default function AdminPOSPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={handleRefundCompletedTicket}
+                      onClick={() => {
+                        setRefundReason('');
+                        setRefundPasscode('');
+                        setRefundDialogOpen(true);
+                      }}
                       disabled={processingRefund || Boolean(activeCompletedTicket.refundedAt)}
                       className="bg-red-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-60"
                     >
@@ -1467,6 +1605,26 @@ export default function AdminPOSPage() {
                       <div className="rounded-xl border border-green-200 bg-green-50 p-3">
                         <p className="text-xs text-green-700">Return</p>
                         <p className="text-lg font-bold text-green-700 mt-1">{formatMoney(cashChangeDue)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {refundDialogOpen && activeCompletedTicket ? (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-red-600">Manager approval</p>
+                      <h3 className="text-xl font-bold mt-1">Refund ticket #{activeCompletedTicket.ticketNumber}?</h3>
+                      <p className="text-sm text-gray-600 mt-2">This creates a refund record for {formatMoney(activeCompletedTicket.total)} and cannot be undone.</p>
+                      <label className="block text-sm font-semibold text-gray-700 mt-4 mb-1">Refund reason</label>
+                      <input value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Reason for refund" />
+                      <label className="block text-sm font-semibold text-gray-700 mt-4 mb-1">Manager passcode</label>
+                      <input type="password" value={refundPasscode} onChange={(e) => setRefundPasscode(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Enter passcode" />
+                      <div className="grid grid-cols-2 gap-2 mt-5">
+                        <button type="button" onClick={() => setRefundDialogOpen(false)} disabled={processingRefund} className="rounded-lg border px-4 py-3 font-semibold">Cancel</button>
+                        <button type="button" onClick={handleRefundCompletedTicket} disabled={processingRefund || !refundReason.trim()} className="rounded-lg bg-red-600 text-white px-4 py-3 font-semibold disabled:opacity-60">
+                          {processingRefund ? 'Refunding...' : 'Confirm Refund'}
+                        </button>
                       </div>
                     </div>
                   </div>
