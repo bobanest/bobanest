@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AdminLayout from '@/components/AdminLayout';
 
@@ -192,6 +192,7 @@ export default function AdminPOSPage() {
   const [fullscreenPasscode, setFullscreenPasscode] = useState('');
   const [fullscreenExitDialogOpen, setFullscreenExitDialogOpen] = useState(false);
   const [fullscreenExitCode, setFullscreenExitCode] = useState('');
+  const wasFullscreenRef = useRef(false);
   const [posLogo, setPosLogo] = useState('/favicon.ico');
   const [printerSettings, setPrinterSettings] = useState({
     mode: 'browser',
@@ -200,6 +201,7 @@ export default function AdminPOSPage() {
     printCopies: 1,
   });
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
   const [cashReceived, setCashReceived] = useState('');
   const [printReceiptOnPayment, setPrintReceiptOnPayment] = useState(true);
   const [completedSearch, setCompletedSearch] = useState('');
@@ -382,18 +384,14 @@ export default function AdminPOSPage() {
         return;
       }
 
-      if (!inFullscreen && requiredPasscode) {
-        const entered = window.prompt('Enter POS passcode to exit full screen');
-        if (entered === requiredPasscode) {
-          setError('');
-          setPasscodeApprovedExit(false);
-          return;
-        }
-        setError('Passcode required to exit full screen.');
+      if (wasFullscreenRef.current && !inFullscreen && requiredPasscode && !passcodeApprovedExit) {
+        setFullscreenExitCode('');
+        setFullscreenExitDialogOpen(true);
         document.documentElement.requestFullscreen().catch(() => {
-          setError('Unable to keep POS in fullscreen mode on this device/browser.');
+          setError('Enter the POS passcode to leave fullscreen mode.');
         });
       }
+      wasFullscreenRef.current = inFullscreen;
     };
     document.addEventListener('fullscreenchange', onFullscreenChange);
     onFullscreenChange();
@@ -609,7 +607,9 @@ export default function AdminPOSPage() {
     setFullscreenExitCode('');
     setPasscodeApprovedExit(true);
     setError('');
-    await document.exitFullscreen();
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    }
   };
 
   const createTicket = () => {
@@ -1317,39 +1317,9 @@ export default function AdminPOSPage() {
                 <div className="mt-4">
                   <label className="block text-xs text-gray-600 mb-1">Discount</label>
                   <div className="grid grid-cols-[1fr_1fr] gap-2">
-                    <select
-                      value={activeTicket.discountType || 'none'}
-                      onChange={(e) =>
-                        updateActiveTicket({
-                          discountType: e.target.value,
-                          discountValue: e.target.value === 'none' ? '' : activeTicket.discountValue || '',
-                        })
-                      }
-                      className="w-full border rounded-lg px-3 py-2 bg-white text-sm"
-                    >
-                      <option value="none">No discount</option>
-                      <option value="percent">Percentage (%)</option>
-                      <option value="amount">Fixed amount ($)</option>
-                    </select>
-                    {(activeTicket.discountType || 'none') === 'none' ? (
-                      <input
-                        type="number"
-                        value=""
-                        readOnly
-                        placeholder="Discount value"
-                        className="w-full border rounded-lg px-3 py-2 bg-gray-100 text-sm"
-                      />
-                    ) : (
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={activeTicket.discountValue}
-                        onChange={(e) => updateActiveTicket({ discountValue: e.target.value })}
-                        placeholder={activeTicket.discountType === 'percent' ? '0 - 100' : 'Amount'}
-                        className="w-full border rounded-lg px-3 py-2 text-sm"
-                      />
-                    )}
+                    <button type="button" onClick={() => setDiscountDialogOpen(true)} className="w-full border rounded-lg px-3 py-2 bg-white text-sm text-left">
+                      {activeTicket.discountType === 'percent' ? `${activeTicket.discountValue}% discount` : 'Add percentage discount'}
+                    </button>
                   </div>
                 </div>
 
@@ -1372,6 +1342,22 @@ export default function AdminPOSPage() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="col-span-2 grid grid-cols-3 gap-2">
+                    {[
+                      ['cash', 'Cash'],
+                      ['card', 'Credit card'],
+                      ['gift-card', 'Gift card'],
+                    ].map(([method, label]) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => updateActiveTicket({ isSplitPayment: false, paymentMethod: method })}
+                        className={`rounded-lg border py-2 text-sm font-semibold ${!activeTicket.isSplitPayment && activeTicket.paymentMethod === method ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <button
                     type="button"
                     onClick={voidTicket}
@@ -1532,11 +1518,9 @@ export default function AdminPOSPage() {
               <div className="mt-5 space-y-4">
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <p className="text-sm font-semibold text-gray-700">Payment method</p>
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <button type="button" onClick={() => updateActiveTicket({ isSplitPayment: false, paymentMethod: 'cash' })} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${!activeTicket.isSplitPayment && activeTicket.paymentMethod === 'cash' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>Cash</button>
-                    <button type="button" onClick={() => updateActiveTicket({ isSplitPayment: false, paymentMethod: 'card' })} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${!activeTicket.isSplitPayment && activeTicket.paymentMethod === 'card' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>Credit card</button>
-                  </div>
-                  <button type="button" onClick={() => updateActiveTicket({ isSplitPayment: true, splitCash: activeTicket.splitCash || '', splitCard: activeTicket.splitCard || '' })} className={`w-full rounded-lg border px-3 py-2 mt-2 text-sm font-semibold ${activeTicket.isSplitPayment ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>Split cash + card</button>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {activeTicket.isSplitPayment ? 'Split cash + card' : activeTicket.paymentMethod === 'gift-card' ? 'Gift card' : activeTicket.paymentMethod === 'card' ? 'Credit card' : 'Cash'}
+                  </p>
                 </div>
 
                 {isCashPaymentFlow ? (
@@ -1569,6 +1553,28 @@ export default function AdminPOSPage() {
                     <input type="number" min="0" step="0.01" value={activeTicket.splitCash} onChange={(e) => updateActiveTicket({ splitCash: e.target.value })} placeholder="Cash amount" className="w-full rounded-lg border px-3 py-2 text-sm" />
                     <input type="number" min="0" step="0.01" value={activeTicket.splitCard} onChange={(e) => updateActiveTicket({ splitCard: e.target.value })} placeholder="Card amount" className="w-full rounded-lg border px-3 py-2 text-sm" />
                     <p className="col-span-2 text-xs text-gray-500">Paid: {formatMoney(splitPaidTotal)} / Total: {formatMoney(ticketTotals.total)}</p>
+                  </div>
+                ) : null}
+
+                {discountDialogOpen && activeTicket ? (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl p-5">
+                      <h3 className="text-xl font-bold">Choose percentage discount</h3>
+                      <p className="text-sm text-gray-500 mt-1">Select one discount for this ticket.</p>
+                      <div className="grid grid-cols-2 gap-3 mt-5">
+                        {[10, 20, 30, 50].map((percent) => (
+                          <button key={percent} type="button" onClick={() => { updateActiveTicket({ discountType: 'percent', discountValue: percent }); setDiscountDialogOpen(false); }} className="rounded-lg border border-blue-200 bg-blue-50 py-4 text-lg font-bold text-blue-700 hover:bg-blue-100">
+                            {percent}%
+                          </button>
+                        ))}
+                      </div>
+                      <button type="button" onClick={() => { updateActiveTicket({ discountType: 'none', discountValue: '' }); setDiscountDialogOpen(false); }} className="w-full rounded-lg border py-3 mt-3 text-sm font-semibold">
+                        Remove discount
+                      </button>
+                      <button type="button" onClick={() => setDiscountDialogOpen(false)} className="w-full text-sm text-gray-500 mt-3">
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ) : null}
 
