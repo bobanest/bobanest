@@ -190,6 +190,8 @@ export default function AdminPOSPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [passcodeApprovedExit, setPasscodeApprovedExit] = useState(false);
   const [fullscreenPasscode, setFullscreenPasscode] = useState('');
+  const [fullscreenExitDialogOpen, setFullscreenExitDialogOpen] = useState(false);
+  const [fullscreenExitCode, setFullscreenExitCode] = useState('');
   const [posLogo, setPosLogo] = useState('/favicon.ico');
   const [printerSettings, setPrinterSettings] = useState({
     mode: 'browser',
@@ -581,11 +583,9 @@ export default function AdminPOSPage() {
     try {
       if (document.fullscreenElement) {
         if (requiredPasscode) {
-          const entered = window.prompt('Enter POS passcode to exit full screen');
-          if (entered !== requiredPasscode) {
-            setError('Passcode required to exit full screen.');
-            return;
-          }
+          setFullscreenExitCode('');
+          setFullscreenExitDialogOpen(true);
+          return;
         }
         setPasscodeApprovedExit(true);
         await document.exitFullscreen();
@@ -598,6 +598,18 @@ export default function AdminPOSPage() {
       setError('Unable to change fullscreen mode on this device/browser.');
       setPasscodeApprovedExit(false);
     }
+  };
+
+  const confirmFullscreenExit = async () => {
+    if (fullscreenExitCode !== String(fullscreenPasscode || '').trim()) {
+      setError('Incorrect passcode. Fullscreen is still locked.');
+      return;
+    }
+    setFullscreenExitDialogOpen(false);
+    setFullscreenExitCode('');
+    setPasscodeApprovedExit(true);
+    setError('');
+    await document.exitFullscreen();
   };
 
   const createTicket = () => {
@@ -1348,64 +1360,6 @@ export default function AdminPOSPage() {
                   <div className="flex justify-between text-base font-bold"><span>Total</span><span>{formatMoney(ticketTotals.total)}</span></div>
                 </div>
 
-                <div className="mt-4">
-                  <label className="block text-xs text-gray-600 mb-1">Payment</label>
-                  <div className="flex items-center gap-2 mb-2">
-                    <input
-                      id="split-payment"
-                      type="checkbox"
-                      checked={Boolean(activeTicket.isSplitPayment)}
-                      onChange={(e) =>
-                        updateActiveTicket({
-                          isSplitPayment: e.target.checked,
-                          splitCash: e.target.checked ? activeTicket.splitCash || '' : '',
-                          splitCard: e.target.checked ? activeTicket.splitCard || '' : '',
-                        })
-                      }
-                    />
-                    <label htmlFor="split-payment" className="text-sm">Split payment</label>
-                  </div>
-
-                  {!activeTicket.isSplitPayment ? (
-                    <select
-                      value={activeTicket.paymentMethod}
-                      onChange={(e) => updateActiveTicket({ paymentMethod: e.target.value })}
-                      className="w-full border rounded-lg px-3 py-2 bg-white text-sm"
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="card">Card</option>
-                    </select>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Cash</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={activeTicket.splitCash}
-                          onChange={(e) => updateActiveTicket({ splitCash: e.target.value })}
-                          className="w-full border rounded-lg px-3 py-2 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Card</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={activeTicket.splitCard}
-                          onChange={(e) => updateActiveTicket({ splitCard: e.target.value })}
-                          className="w-full border rounded-lg px-3 py-2 text-sm"
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 col-span-2">
-                        Paid: {formatMoney(splitPaidTotal)} / Total: {formatMoney(ticketTotals.total)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
                 <div className="mt-3">
                   <label className="block text-xs text-gray-600 mb-1">Ticket note</label>
                   <textarea
@@ -1578,9 +1532,11 @@ export default function AdminPOSPage() {
               <div className="mt-5 space-y-4">
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <p className="text-sm font-semibold text-gray-700">Payment method</p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {activeTicket.isSplitPayment ? 'Split payment' : activeTicket.paymentMethod === 'cash' ? 'Cash' : 'Card'}
-                  </p>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <button type="button" onClick={() => updateActiveTicket({ isSplitPayment: false, paymentMethod: 'cash' })} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${!activeTicket.isSplitPayment && activeTicket.paymentMethod === 'cash' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>Cash</button>
+                    <button type="button" onClick={() => updateActiveTicket({ isSplitPayment: false, paymentMethod: 'card' })} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${!activeTicket.isSplitPayment && activeTicket.paymentMethod === 'card' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>Credit card</button>
+                  </div>
+                  <button type="button" onClick={() => updateActiveTicket({ isSplitPayment: true, splitCash: activeTicket.splitCash || '', splitCard: activeTicket.splitCard || '' })} className={`w-full rounded-lg border px-3 py-2 mt-2 text-sm font-semibold ${activeTicket.isSplitPayment ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}>Split cash + card</button>
                 </div>
 
                 {isCashPaymentFlow ? (
@@ -1608,6 +1564,12 @@ export default function AdminPOSPage() {
                       </div>
                     </div>
                   </div>
+                ) : activeTicket.isSplitPayment ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="number" min="0" step="0.01" value={activeTicket.splitCash} onChange={(e) => updateActiveTicket({ splitCash: e.target.value })} placeholder="Cash amount" className="w-full rounded-lg border px-3 py-2 text-sm" />
+                    <input type="number" min="0" step="0.01" value={activeTicket.splitCard} onChange={(e) => updateActiveTicket({ splitCard: e.target.value })} placeholder="Card amount" className="w-full rounded-lg border px-3 py-2 text-sm" />
+                    <p className="col-span-2 text-xs text-gray-500">Paid: {formatMoney(splitPaidTotal)} / Total: {formatMoney(ticketTotals.total)}</p>
+                  </div>
                 ) : null}
 
                 {refundDialogOpen && activeCompletedTicket ? (
@@ -1625,6 +1587,21 @@ export default function AdminPOSPage() {
                         <button type="button" onClick={handleRefundCompletedTicket} disabled={processingRefund || !refundReason.trim()} className="rounded-lg bg-red-600 text-white px-4 py-3 font-semibold disabled:opacity-60">
                           {processingRefund ? 'Refunding...' : 'Confirm Refund'}
                         </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {fullscreenExitDialogOpen ? (
+                  <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+                    <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl p-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-blue-600">Protected POS</p>
+                      <h3 className="text-xl font-bold mt-1">Exit fullscreen?</h3>
+                      <p className="text-sm text-gray-600 mt-2">Enter the POS passcode to leave fullscreen mode. Your ticket will remain open.</p>
+                      <input autoFocus type="password" value={fullscreenExitCode} onChange={(e) => setFullscreenExitCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') confirmFullscreenExit(); }} className="w-full border rounded-lg px-3 py-3 mt-4 text-lg" placeholder="POS passcode" />
+                      <div className="grid grid-cols-2 gap-2 mt-4">
+                        <button type="button" onClick={() => setFullscreenExitDialogOpen(false)} className="rounded-lg border px-4 py-3 font-semibold">Stay fullscreen</button>
+                        <button type="button" onClick={confirmFullscreenExit} className="rounded-lg bg-blue-600 text-white px-4 py-3 font-semibold">Exit fullscreen</button>
                       </div>
                     </div>
                   </div>
