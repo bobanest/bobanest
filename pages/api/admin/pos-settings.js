@@ -1,5 +1,6 @@
 import dbConnect from '@/lib/dbConnect';
 import PosSetting from '@/lib/models/PosSetting';
+import { hashPasscode } from '@/lib/posPasscode';
 
 export default async function handler(req, res) {
   await dbConnect();
@@ -8,7 +9,11 @@ export default async function handler(req, res) {
     try {
       const settings = await PosSetting.find({}).lean();
       const payload = settings.reduce((acc, setting) => {
-        acc[setting.key] = setting.value;
+        if (setting.key === 'fullscreenPasscode') {
+          acc.fullscreenPasscodeSet = Boolean(String(setting.value || '').trim());
+        } else {
+          acc[setting.key] = setting.value;
+        }
         return acc;
       }, {});
       return res.status(200).json(payload);
@@ -24,13 +29,21 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Setting key is required' });
       }
 
+      const settingKey = String(key).trim();
+      const storedValue = settingKey === 'fullscreenPasscode'
+        ? (String(value || '').trim() ? hashPasscode(String(value).trim()) : '')
+        : value;
+
       const updated = await PosSetting.findOneAndUpdate(
-        { key: String(key).trim() },
-        { $set: { value, updatedAt: new Date() } },
+        { key: settingKey },
+        { $set: { value: storedValue, updatedAt: new Date() } },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       ).lean();
 
-      return res.status(200).json({ key: updated.key, value: updated.value });
+      return res.status(200).json({
+        key: updated.key,
+        value: updated.key === 'fullscreenPasscode' ? undefined : updated.value,
+      });
     } catch (error) {
       return res.status(500).json({ error: error.message || 'Unable to save POS setting' });
     }

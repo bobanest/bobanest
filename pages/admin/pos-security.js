@@ -22,7 +22,7 @@ export default function POSSecurityPage() {
         if (!response.ok) throw new Error(`Failed to load settings (${response.status})`);
         const data = text ? JSON.parse(text) : {};
         if (cancelled) return;
-        setCurrentPasscodeSet(Boolean(String(data.fullscreenPasscode || '').trim()));
+        setCurrentPasscodeSet(Boolean(data.fullscreenPasscodeSet));
       } catch (loadError) {
         if (cancelled) return;
         setError(loadError.message || 'Unable to load POS passcode settings.');

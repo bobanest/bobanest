@@ -270,8 +270,8 @@ export default function AdminPOSPage() {
             console.warn('Unable to cache POS logo locally', storageError);
           }
         }
-        if (typeof body.fullscreenPasscode === 'string') {
-          setFullscreenPasscode(body.fullscreenPasscode);
+        if (body.fullscreenPasscodeSet) {
+          setFullscreenPasscode('set');
         }
         if (body.posPrinterSettings && typeof body.posPrinterSettings === 'object') {
           setPrinterSettings((current) => ({ ...current, ...body.posPrinterSettings }));
@@ -598,8 +598,22 @@ export default function AdminPOSPage() {
     }
   };
 
+  const verifyPosPasscode = async (code) => {
+    try {
+      const response = await fetch('/api/admin/pos-passcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passcode: code }),
+      });
+      const body = await response.json().catch(() => ({}));
+      return response.ok && body.ok === true;
+    } catch (verifyError) {
+      return false;
+    }
+  };
+
   const confirmFullscreenExit = async () => {
-    if (fullscreenExitCode !== String(fullscreenPasscode || '').trim()) {
+    if (!(await verifyPosPasscode(fullscreenExitCode))) {
       setError('Incorrect passcode. Fullscreen is still locked.');
       return;
     }
@@ -704,7 +718,7 @@ export default function AdminPOSPage() {
       setError('Set a POS passcode in Settings before processing refunds.');
       return;
     }
-    if (refundPasscode !== fullscreenPasscode) {
+    if (!(await verifyPosPasscode(refundPasscode))) {
       setError('Manager passcode is required to refund this ticket.');
       return;
     }

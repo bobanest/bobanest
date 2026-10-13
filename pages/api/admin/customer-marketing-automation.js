@@ -7,9 +7,6 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.bobanest.com';
 const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL || 'https://g.co/kgs/bobanest';
 
 function isAuthorized(req) {
-  const vercelCron = req.headers['x-vercel-cron'];
-  if (vercelCron === '1') return true;
-
   const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
   const secret = String(req.query?.secret || req.body?.secret || bearer || '').trim();
   const validSecrets = [

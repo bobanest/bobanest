@@ -6,9 +6,6 @@ import { sendEmployeeScheduleEmail } from '@/lib/employeeScheduleEmail';
 const DEFAULT_TIMEZONE = process.env.SCHEDULE_TIMEZONE || 'America/New_York';
 
 function isAuthorized(req) {
-  const vercelCron = req.headers['x-vercel-cron'];
-  if (vercelCron === '1') return true;
-
   const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
   const secret = String(req.query?.secret || req.body?.secret || bearer || '').trim();
   const validSecrets = [process.env.CRON_SECRET, process.env.EMPLOYEE_API_SECRET].filter(Boolean);
