@@ -9,6 +9,11 @@ export default async function handler(req, res) {
     const { email } = req.query;
 
     // Single customer detail
+    if (req.query.id) {
+      const customer = await Customer.findById(String(req.query.id)).lean().catch(() => null);
+      if (!customer) return res.status(404).json({ error: 'Not found' });
+      return res.json({ customer, orders: [], totalSpent: 0 });
+    }
     if (email) {
       const normalizedEmail = String(email).toLowerCase().trim();
       const customer = await Customer.findOne({ email: normalizedEmail }).lean();

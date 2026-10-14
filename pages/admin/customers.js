@@ -34,11 +34,14 @@ export default function AdminCustomers() {
     }
   };
 
-  const loadDetail = async (email) => {
-    setSelected(email);
+  const loadDetail = async (c) => {
+    setSelected(c.email || c._id);
     setLoadingDetail(true);
     try {
-      const res = await fetch(`/api/admin/customers?email=${encodeURIComponent(email)}`);
+      const url = c.email
+        ? `/api/admin/customers?email=${encodeURIComponent(c.email)}`
+        : `/api/admin/customers?id=${encodeURIComponent(c._id)}`;
+      const res = await fetch(url);
       setDetail(await res.json());
     } finally {
       setLoadingDetail(false);
@@ -76,7 +79,7 @@ export default function AdminCustomers() {
       setMessageType('success');
       setForm({ name: '', email: '', points: 0 });
       await fetchCustomers();
-      await loadDetail(data.email);
+      await loadDetail({ email: data.email });
     } catch (error) {
       setMessage(error.message || 'Failed to save customer.');
       setMessageType('error');
@@ -86,7 +89,8 @@ export default function AdminCustomers() {
   };
 
   const filtered = customers.filter(c =>
-    c.email.toLowerCase().includes(search.toLowerCase()) ||
+    (c.email || '').toLowerCase().includes(search.toLowerCase()) ||
+    (c.phone || '').replace(/\D/g, '').includes(search.replace(/\D/g, '') || '\u0000') ||
     (c.name || '').toLowerCase().includes(search.toLowerCase())
   );
 
@@ -188,12 +192,12 @@ export default function AdminCustomers() {
                       {filtered.map(c => (
                         <tr
                           key={c._id}
-                          className={`border-t cursor-pointer hover:bg-gray-50 ${selected === c.email ? 'bg-primary/5' : ''}`}
-                          onClick={() => loadDetail(c.email)}
+                          className={`border-t cursor-pointer hover:bg-gray-50 ${selected === (c.email || c._id) ? 'bg-primary/5' : ''}`}
+                          onClick={() => loadDetail(c)}
                         >
                           <td className="p-3">
                             <p className="font-medium">{c.name || '—'}</p>
-                            <p className="text-xs text-gray-400">{c.email}</p>
+                            <p className="text-xs text-gray-400">{c.email || c.phone}</p>
                           </td>
                           <td className="p-3 text-right text-gray-600">{c.orderCount}</td>
                           <td className="p-3 text-right font-semibold text-green-600">${(c.totalSpent || 0).toFixed(2)}</td>
@@ -219,8 +223,8 @@ export default function AdminCustomers() {
               ) : detail ? (
                 <div className="bg-white rounded-lg shadow overflow-hidden">
                   <div className="bg-gray-50 p-4 border-b">
-                    <p className="font-bold text-lg">{detail.customer.name || detail.customer.email}</p>
-                    <p className="text-sm text-gray-500">{detail.customer.email}</p>
+                    <p className="font-bold text-lg">{detail.customer.name || detail.customer.email || detail.customer.phone}</p>
+                    <p className="text-sm text-gray-500">{detail.customer.email}{detail.customer.email && detail.customer.phone ? ' · ' : ''}{detail.customer.phone}</p>
                     <div className="flex gap-4 mt-2 text-sm">
                       <span className={`font-semibold ${tierColor(detail.customer.points)}`}>{tier(detail.customer.points)}</span>
                       <span className="text-gray-600">{detail.customer.points} pts</span>
