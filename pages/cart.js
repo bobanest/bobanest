@@ -57,7 +57,7 @@ function fmtTime12(t) {
 }
 
 export default function CartPage() {
-  const { cartItems, removeFromCart, updateQuantity, totalPrice, clearCart, addToCart } = useCart();
+  const { cartItems, removeFromCart, updateQuantity, totalPrice, clearCart, addToCart, restoreCart } = useCart();
   const DELIVERY_FEE_AMOUNT = 4.99;
   const DELIVERY_MIN_ORDER_SUBTOTAL = 20;
   const [checkingOut, setCheckingOut] = useState(false);
@@ -251,8 +251,76 @@ export default function CartPage() {
     }
     setError('');
     setEmailSaved(true);
+    try { localStorage.setItem('cartEmail', customerEmail.trim().toLowerCase()); window.dispatchEvent(new Event('cart-email-saved')); } catch {}
     loadCustomerData(customerEmail);
   };
+
+  const [loyaltyToken, setLoyaltyToken] = useState('');
+  const [verifyStep, setVerifyStep] = useState('idle'); // idle | code | verified
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifyMsg, setVerifyMsg] = useState('');
+  const [verifyBusy, setVerifyBusy] = useState(false);
+
+  const sendVerifyCode = async () => {
+    setVerifyBusy(true);
+    setVerifyMsg('');
+    try {
+      const r = await fetch('/api/loyalty/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: customerEmail }),
+      });
+      if (!r.ok) throw new Error();
+      setVerifyStep('code');
+      setVerifyMsg('We emailed you a 6-digit code.');
+    } catch {
+      setVerifyMsg('Could not send the code. Try again.');
+    }
+    setVerifyBusy(false);
+  };
+
+  const submitVerifyCode = async () => {
+    setVerifyBusy(true);
+    setVerifyMsg('');
+    try {
+      const r = await fetch('/api/loyalty/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: customerEmail, code: verifyCode.trim() }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.rewardToken) throw new Error(d.error || 'Invalid code');
+      setLoyaltyToken(d.rewardToken);
+      setVerifyStep('verified');
+    } catch (e) {
+      setVerifyMsg(e.message || 'Invalid code');
+    }
+    setVerifyBusy(false);
+  };
+
+  // Restore a cart from an abandoned-cart email link
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const token = new URLSearchParams(window.location.search).get('recover');
+    if (!token) return;
+    fetch(`/api/cart/recover?token=${encodeURIComponent(token)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!d) return;
+        if (Array.isArray(d.items) && d.items.length) restoreCart(d.items);
+        if (d.email) {
+          setCustomerEmail(d.email);
+          setEmailSaved(true);
+          try { localStorage.setItem('cartEmail', d.email); } catch {}
+          loadCustomerData(d.email);
+        }
+        if (d.pickupLocation) setPickupLocation(d.pickupLocation);
+        window.history.replaceState({}, '', '/cart');
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   // Loyalty points redemption
   const redeemableRewards = loyaltyPoints !== null ? Math.floor(loyaltyPoints / POINTS_PER_REWARD) : 0;
@@ -428,8 +496,8 @@ export default function CartPage() {
           customerEmail: customerEmail || null,
           customerPhone: customerPhone || null,
           scheduledTime: scheduleEnabled ? new Date(scheduledTime).toISOString() : null,
-          loyaltyDiscount,
           loyaltyPointsUsed: loyaltyPointsToRedeem,
+          loyaltyToken: loyaltyToken || null,
         }),
       });
       const data = await response.json();
@@ -586,7 +654,7 @@ export default function CartPage() {
               ) : (
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-700">{customerEmail}</span>
-                  <button onClick={() => { setEmailSaved(false); setLoyaltyPoints(null); setLoyaltyDiscount(0); setLoyaltyPointsToRedeem(0); }} className="text-xs text-primary underline">Change</button>
+                  <button onClick={() => { setEmailSaved(false); setLoyaltyPoints(null); setLoyaltyDiscount(0); setLoyaltyPointsToRedeem(0); setLoyaltyToken(''); setVerifyStep('idle'); setVerifyCode(''); }} className="text-xs text-primary underline">Change</button>
                 </div>
               )}
             </div>
@@ -610,7 +678,29 @@ export default function CartPage() {
             {emailSaved && loyaltyPoints !== null && (
               <div className="bg-purple-50 border border-purple-200 rounded p-3">
                 <p className="text-sm font-semibold text-purple-700">🏆 You have {loyaltyPoints} points</p>
-                {redeemableRewards > 0 ? (
+                {redeemableRewards > 0 && verifyStep !== 'verified' ? (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-xs text-gray-600">You can redeem {POINTS_PER_REWARD} pts = ${REWARD_VALUE} off. Verify your email to use rewards.</p>
+                    {verifyStep === 'idle' ? (
+                      <button type="button" onClick={sendVerifyCode} disabled={verifyBusy} className="bg-purple-600 text-white px-3 py-2 rounded text-sm">
+                        {verifyBusy ? 'Sending...' : 'Email me a code'}
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder="6-digit code"
+                          value={verifyCode}
+                          onChange={e => setVerifyCode(e.target.value)}
+                          className="flex-1 border p-2 rounded text-sm"
+                        />
+                        <button type="button" onClick={submitVerifyCode} disabled={verifyBusy || verifyCode.length < 6} className="bg-purple-600 text-white px-3 py-2 rounded text-sm">Verify</button>
+                      </div>
+                    )}
+                    {verifyMsg && <p className="text-xs text-gray-600">{verifyMsg}</p>}
+                  </div>
+                ) : redeemableRewards > 0 ? (
                   <div className="mt-2">
                     <p className="text-xs text-gray-600 mb-1">Redeem {POINTS_PER_REWARD} pts = ${REWARD_VALUE} off</p>
                     <div className="flex gap-2 items-center">
@@ -874,6 +964,12 @@ export default function CartPage() {
               {giftCardDiscount > 0 && <div className="flex justify-between text-emerald-700"><span>Gift Card</span><span>-${giftCardDiscount.toFixed(2)}</span></div>}
               <div className="flex justify-between text-gray-600"><span>Discounted Subtotal</span><span>${discountedSubtotal.toFixed(2)}</span></div>
               <div className="flex justify-between font-bold text-base pt-2 border-t"><span>Total</span><span>${finalTotal.toFixed(2)}</span></div>
+              {customerEmail && emailSaved && (
+                <p className="text-xs text-purple-700 pt-1">
+                  🏆 You'll earn {Math.floor(finalTotal)} points with this order
+                  {loyaltyPoints !== null && ` (${POINTS_PER_REWARD - (((loyaltyPoints - loyaltyPointsToRedeem) + Math.floor(finalTotal)) % POINTS_PER_REWARD)} more to your next $${REWARD_VALUE} reward)`}
+                </p>
+              )}
             </div>
 
             {scheduleEnabled && (

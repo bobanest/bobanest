@@ -33,7 +33,7 @@ export default async function handler(req, res) {
 
     await Customer.findOneAndUpdate(
       { email: emailLower },
-      { $set: { verificationCode: code, verificationCodeExpiry: expiry } },
+      { $set: { verificationCode: code, verificationCodeExpiry: expiry, verificationAttempts: 0 } },
       { upsert: true, setDefaultsOnInsert: true }
     );
 

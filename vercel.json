@@ -12,6 +12,10 @@
       "schedule": "0 18 * * *"
     },
     {
+      "path": "/api/admin/abandoned-cart-recovery",
+      "schedule": "0 16 * * *"
+    },
+    {
       "path": "/api/admin/customer-marketing-automation",
       "schedule": "0 18 * * *"
     }

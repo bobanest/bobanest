@@ -3,6 +3,7 @@ import Order from '@/lib/models/Order';
 import Customer from '@/lib/models/Customer';
 import { POINTS_PER_DOLLAR } from '../loyalty';
 import { redeemGiftCardBalance } from '@/lib/giftCardService';
+import { markCartRecovered } from '@/lib/abandonedCart';
 
 const DELIVERY_FEE_AMOUNT = 4.99;
 
@@ -31,6 +32,7 @@ export default async function handler(req, res) {
     order.totalAmount = computedTotal;
     order.paymentStatus = 'paid';
     await order.save();
+    markCartRecovered(order.customerEmail).catch(() => {});
 
     if (order.giftCardCode && Number(order.giftCardRedeemedAmount || 0) > 0) {
       await redeemGiftCardBalance({

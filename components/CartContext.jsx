@@ -161,6 +161,14 @@ export function CartProvider({ children }) {
 
     // Track Facebook AddToCart event
     trackAddToCart(product, product.quantity || 1);
+
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/cart')) {
+      setCartOpen(true);
+    }
+  };
+
+  const restoreCart = (items) => {
+    if (Array.isArray(items)) setCartItems(items);
   };
 
   const removeFromCart = (productId, modifiers = null) => {
@@ -204,6 +212,31 @@ export function CartProvider({ children }) {
     localStorage.setItem('cart', JSON.stringify(cartItems));
   }, [cartItems]);
 
+  // Debounced snapshot for abandoned-cart reminders (only when the customer gave an email)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const email = localStorage.getItem('cartEmail');
+        if (!email) return;
+        fetch('/api/cart/capture', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            items: cartItems,
+            pickupLocation: localStorage.getItem('bobanest-selected-pickup-location') || '',
+          }),
+        }).catch(() => {});
+      } catch {}
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [cartItems]);
+
+  useEffect(() => {
+    const onEmail = () => setCartItems(prev => [...prev]);
+    window.addEventListener('cart-email-saved', onEmail);
+    return () => window.removeEventListener('cart-email-saved', onEmail);
+  }, []);
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
@@ -219,6 +252,7 @@ export function CartProvider({ children }) {
       removeFromCart,
       updateQuantity,
       clearCart,
+      restoreCart,
     }}>
       {children}
     </CartContext.Provider>
@@ -239,6 +273,7 @@ export function useCart() {
       removeFromCart: () => {},
       updateQuantity: () => {},
       clearCart: () => {},
+      restoreCart: () => {},
     };
   }
   return context;

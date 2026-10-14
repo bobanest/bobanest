@@ -27,8 +27,9 @@ export default function CartDrawer() {
         aria-hidden="true"
       />
 
-      {/* Drawer panel */}
-      <div className="fixed top-0 right-0 h-full w-full max-w-[420px] bg-[#1a0f0c] border-l border-white/10 z-[70] flex flex-col shadow-2xl animate-slide-in-right">
+      {/* Drawer panel: bottom sheet on mobile, right panel on desktop */}
+      <div className="fixed bottom-0 left-0 right-0 h-[88vh] w-full rounded-t-3xl md:top-0 md:left-auto md:bottom-auto md:h-full md:max-w-[420px] md:rounded-none bg-[#1a0f0c] border-t md:border-t-0 md:border-l border-white/10 z-[70] flex flex-col shadow-2xl animate-cart-sheet">
+        <div className="md:hidden flex justify-center pt-2"><span className="w-10 h-1 rounded-full bg-white/20" /></div>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-white/10 flex-shrink-0">
@@ -156,12 +157,21 @@ export default function CartDrawer() {
       </div>
 
       <style jsx global>{`
-        @keyframes slideInRight {
+        @keyframes cartSlideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+        @keyframes cartSlideLeft {
           from { transform: translateX(100%); }
           to { transform: translateX(0); }
         }
-        .animate-slide-in-right {
-          animation: slideInRight 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+        .animate-cart-sheet {
+          animation: cartSlideUp 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        @media (min-width: 768px) {
+          .animate-cart-sheet {
+            animation: cartSlideLeft 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+          }
         }
       `}</style>
     </>

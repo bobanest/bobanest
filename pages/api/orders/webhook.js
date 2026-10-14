@@ -7,6 +7,7 @@ import GiftCard from '@/lib/models/GiftCard';
 import GiftCardTransaction from '@/lib/models/GiftCardTransaction';
 import { sendGiftCardEmail } from '@/lib/giftCardEmail';
 import { redeemGiftCardBalance } from '@/lib/giftCardService';
+import { markCartRecovered } from '@/lib/abandonedCart';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -180,6 +181,7 @@ export default async function handler(req, res) {
         } catch (e) {}
         await order.save();
         console.log(`Order ${order.trackingNumber} updated after payment.`);
+        markCartRecovered(order.customerEmail).catch(() => {});
 
         if (order.giftCardCode && Number(order.giftCardRedeemedAmount || 0) > 0) {
           await redeemGiftCardBalance({

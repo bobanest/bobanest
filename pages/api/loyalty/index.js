@@ -22,31 +22,17 @@ export default async function handler(req, res) {
     try {
       await schema.validate(req.query, { abortEarly: false });
       const { email } = req.query;
-      const customer = await Customer.findOne({ email: email.toLowerCase() });
+      const customer = await Customer.findOne({ email: email.toLowerCase() }).select('points').lean();
       if (!customer) return res.status(404).json({ error: 'Not found' });
-      return res.json(customer);
+      return res.json({ points: customer.points || 0 });
     } catch (err) {
       return res.status(400).json({ error: 'Validation failed', details: err.errors });
     }
   }
 
-  // POST: redeem points for a discount
-  // body: { email, pointsToRedeem }
+  // Redemption now happens server-side during checkout with a verified reward token.
   if (req.method === 'POST') {
-    const { email, pointsToRedeem } = req.body;
-    if (!email || !pointsToRedeem) return res.status(400).json({ error: 'email and pointsToRedeem required' });
-    const pts = parseInt(pointsToRedeem, 10);
-    if (isNaN(pts) || pts < POINTS_PER_REWARD || pts % POINTS_PER_REWARD !== 0)
-      return res.status(400).json({ error: `Points must be a multiple of ${POINTS_PER_REWARD}` });
-
-    const customer = await Customer.findOne({ email: email.toLowerCase() });
-    if (!customer) return res.status(404).json({ error: 'Customer not found' });
-    if (customer.points < pts) return res.status(400).json({ error: 'Not enough points' });
-
-    const discount = (pts / POINTS_PER_REWARD) * REWARD_VALUE;
-    customer.points -= pts;
-    await customer.save();
-    return res.json({ success: true, discount, pointsUsed: pts, remainingPoints: customer.points });
+    return res.status(410).json({ error: 'Redeem points at checkout' });
   }
 
   res.status(405).end();

@@ -5,7 +5,7 @@ import { getToken } from 'next-auth/jwt';
 const PUBLIC_GET_ROUTES = new Set(['hero', 'products', 'promotions', 'modifiers', 'facebook-tracking']);
 
 // Cron handlers that validate CRON_SECRET / EMPLOYEE_API_SECRET themselves.
-const SELF_AUTH_CRON_ROUTES = new Set(['employee-schedule-notify', 'customer-marketing-automation']);
+const SELF_AUTH_CRON_ROUTES = new Set(['employee-schedule-notify', 'customer-marketing-automation', 'abandoned-cart-recovery']);
 
 const CRON_ONLY_ROUTES = new Set(['shift4-sync']);
 

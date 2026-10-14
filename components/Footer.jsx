@@ -26,6 +26,36 @@ export default function Footer({ dark = false }) {
 
   const sortedHours = [...weeklyHours].sort((a, b) => a.day - b.day);
 
+  const [locations, setLocations] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/locations')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setLocations(data.filter((l) => l.isActive !== false));
+      })
+      .catch(() => {});
+  }, []);
+
+  const shownLocations = locations.length > 0
+    ? locations
+    : [{ name: '5004 Mission Sq Ln, Zephyrhills, FL 33542' }, { name: 'Premium Outlet, Lutz (Coming Soon)' }];
+
+  // Group consecutive days (Mon..Sun) sharing the same hours, e.g. "Mon – Sun"
+  const hoursRows = (() => {
+    const ordered = [1, 2, 3, 4, 5, 6, 0]
+      .map((d) => sortedHours.find((h) => h.day === d))
+      .filter(Boolean);
+    const label = (s) => (s.isOpen ? `${formatTime12(s.openTime)} – ${formatTime12(s.closeTime)}` : 'Closed');
+    const rows = [];
+    for (const slot of ordered) {
+      const last = rows[rows.length - 1];
+      if (last && last.text === label(slot)) last.end = slot.day;
+      else rows.push({ start: slot.day, end: slot.day, text: label(slot) });
+    }
+    return rows;
+  })();
+
   const bg = dark ? 'bg-[#0d0705]' : 'bg-dark';
   const headingColor = dark ? 'text-[#e8a33d]' : 'text-white';
   const mutedText = dark ? 'text-[#8a6a50]' : 'text-gray-400';
@@ -57,11 +87,10 @@ export default function Footer({ dark = false }) {
           <div>
             <h4 className={`font-bold mb-4 ${headingColor}`}>Hours</h4>
             <ul className={`space-y-1.5 ${bodyText} text-sm`}>
-              {sortedHours.length > 0 ? (
-                sortedHours.map((slot) => (
-                  <li key={slot.day}>
-                    {DAY_LABELS[slot.day]}:{' '}
-                    {slot.isOpen ? `${formatTime12(slot.openTime)} – ${formatTime12(slot.closeTime)}` : 'Closed'}
+              {hoursRows.length > 0 ? (
+                hoursRows.map((row) => (
+                  <li key={row.start}>
+                    {row.start === row.end ? DAY_LABELS[row.start] : `${DAY_LABELS[row.start]} – ${DAY_LABELS[row.end]}`}: {row.text}
                   </li>
                 ))
               ) : (
@@ -74,8 +103,12 @@ export default function Footer({ dark = false }) {
             </ul>
           </div>
           <div>
-            <h4 className={`font-bold mb-4 ${headingColor}`}>Location</h4>
-            <p className={`${bodyText} text-sm leading-relaxed`}>5004 Mission Square Ln<br />Zephyrhills, FL 33542</p>
+            <h4 className={`font-bold mb-4 ${headingColor}`}>Locations</h4>
+            <ul className={`${bodyText} text-sm leading-relaxed space-y-2`}>
+              {shownLocations.map((l) => (
+                <li key={l.slug || l.name}>📍 {l.name}</li>
+              ))}
+            </ul>
             <div className="flex gap-3 mt-4">
               <a href="https://www.instagram.com/bobanest.us/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className={`${bodyText} ${linkHover} transition`}>
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zM5.838 12a6.162 6.162 0 1112.324 0 6.162 6.162 0 01-12.324 0zM12 16a4 4 0 110-8 4 4 0 010 8zm4.965-10.405a1.44 1.44 0 112.881.001 1.44 1.44 0 01-2.881-.001z"/></svg>

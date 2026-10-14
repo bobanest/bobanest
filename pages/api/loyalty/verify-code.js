@@ -2,6 +2,7 @@ import dbConnect from '@/lib/dbConnect';
 import Customer from '@/lib/models/Customer';
 import Order from '@/lib/models/Order';
 import FacebookTracking from '@/lib/models/FacebookTracking';
+import { createRewardToken } from '@/lib/rewardToken';
 
 async function sendFacebookCompleteRegistrationEvent(req) {
   try {
@@ -64,7 +65,12 @@ export default async function handler(req, res) {
     });
   }
 
+  if ((customer.verificationAttempts || 0) >= 5) {
+    return res.status(429).json({ error: 'Too many incorrect attempts. Please request a new code.' });
+  }
+
   if (!customer.verificationCode || customer.verificationCode !== code.trim()) {
+    await Customer.updateOne({ email: emailLower }, { $inc: { verificationAttempts: 1 } });
     return res.status(400).json({ error: 'Invalid verification code. Please try again.' });
   }
 
@@ -78,7 +84,7 @@ export default async function handler(req, res) {
   // Clear the code after successful verification
   await Customer.updateOne(
     { email: emailLower },
-    { $unset: { verificationCode: '', verificationCodeExpiry: '' } }
+    { $unset: { verificationCode: '', verificationCodeExpiry: '' }, $set: { verificationAttempts: 0 } }
   );
 
   // Fetch recent orders
@@ -95,5 +101,6 @@ export default async function handler(req, res) {
       favoriteOrders: customer.favoriteOrders,
     },
     orders,
+    rewardToken: createRewardToken(emailLower),
   });
 }
