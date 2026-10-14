@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCart } from '@/components/CartContext';
 import ProductModal from '@/components/ProductModal';
+import ReorderUsual from '@/components/ReorderUsual';
 
 const DESCRIPTION_VISIBLE_MS = 4000;
 const STATIC_GOOGLE_REVIEWS = [
@@ -324,6 +325,7 @@ export default function Home() {
 			{/* ── Quick Entry Cards ── */}
 			<section className="bg-[#150d09] py-8">
 				<div className="max-w-7xl mx-auto px-4">
+					<ReorderUsual className="mb-4 w-full md:w-auto" />
 					<div className="grid md:grid-cols-3 gap-4">
 						{[
 							{ href: '/products', eyebrow: 'Fast Pick', title: 'Popular Drinks', desc: 'Order customer favorites in seconds.' },

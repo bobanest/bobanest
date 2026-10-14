@@ -2,6 +2,8 @@
 import { useCart } from './CartContext';
 import Link from 'next/link';
 import { useEffect } from 'react';
+import CartUpsell from './CartUpsell';
+import ReorderUsual from './ReorderUsual';
 
 export default function CartDrawer() {
   const { cartItems, totalItems, totalPrice, cartOpen, closeCart, updateQuantity, removeFromCart } = useCart();
@@ -60,6 +62,7 @@ export default function CartDrawer() {
               <div className="text-6xl mb-4 opacity-60">🧋</div>
               <p className="text-[#b89070] font-semibold text-lg">Your cart is empty</p>
               <p className="text-[#6b4e37] text-sm mt-2">Add some drinks to get started!</p>
+              <div className="mt-5"><ReorderUsual onDone={closeCart} /></div>
               <button
                 onClick={closeCart}
                 className="mt-6 bg-[#e8a33d] text-[#1a0f0c] font-bold px-6 py-2.5 rounded-full hover:bg-amber-400 transition text-sm"
@@ -133,6 +136,7 @@ export default function CartDrawer() {
         {/* Footer — checkout */}
         {cartItems.length > 0 && (
           <div className="px-5 py-5 border-t border-white/10 bg-[#150d09] flex-shrink-0 space-y-3">
+            <CartUpsell />
             <div className="flex items-center justify-between mb-1">
               <span className="text-[#b89070]">Subtotal ({totalItems} item{totalItems !== 1 ? 's' : ''})</span>
               <span className="text-[#f5e6c8] font-extrabold text-xl">${totalPrice.toFixed(2)}</span>

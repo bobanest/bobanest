@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { useCart } from '@/components/CartContext';
+import { saveLastOrder } from '@/components/ReorderUsual';
 
 export default function TrackOrder() {
   const searchParams = useSearchParams();
@@ -36,6 +37,7 @@ export default function TrackOrder() {
           const orderData = res.data;
           setOrder(orderData);
           setTrackingNumber(orderData.trackingNumber);
+          try { saveLastOrder(JSON.parse(localStorage.getItem('cart') || '[]')); } catch {}
           clearCart();
           localStorage.removeItem('cart');
           notify(`Order #${orderData.trackingNumber} accepted!`);

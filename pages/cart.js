@@ -2,6 +2,8 @@
 
 import Layout from '@/components/Layout';
 import { useCart } from '@/components/CartContext';
+import CartUpsell from '@/components/CartUpsell';
+import { saveLastOrder } from '@/components/ReorderUsual';
 import Link from 'next/link';
 import { loadStripe } from '@stripe/stripe-js';
 import { useState, useEffect } from 'react';
@@ -75,7 +77,11 @@ export default function CartPage() {
   const [pickupLocation, setPickupLocation] = useState(getSelectedPickupLocation());
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
-  const [scheduledTime, setScheduledTime] = useState(toDatetimeLocal(getMinScheduledTime()));
+  const [scheduledTime, setScheduledTime] = useState('');
+  const [slots, setSlots] = useState([]);
+  const [slotTz, setSlotTz] = useState('America/New_York');
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [selectedSlotDay, setSelectedSlotDay] = useState('');
   const [loyaltyPoints, setLoyaltyPoints] = useState(null); // null = not loaded
   const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState(0);
   const [loyaltyDiscount, setLoyaltyDiscount] = useState(0);
@@ -108,6 +114,46 @@ export default function CartPage() {
   // Store open/closed status + scheduled time validity
   const storeIsOpen = storeInfo == null ? true : storeInfo.isOpen;
   const scheduledTimeOk = checkScheduledOpen(storeInfo, scheduledTime);
+
+  const formatSlotTime = (iso) =>
+    new Date(iso).toLocaleTimeString([], { timeZone: slotTz, hour: 'numeric', minute: '2-digit' });
+
+  const slotDays = (() => {
+    const groups = [];
+    const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: slotTz }).format(new Date());
+    for (const slot of slots) {
+      const d = new Date(slot.time);
+      const key = new Intl.DateTimeFormat('en-CA', { timeZone: slotTz }).format(d);
+      let group = groups.find(g => g.key === key);
+      if (!group) {
+        const label = key === todayKey
+          ? 'Today'
+          : d.toLocaleDateString([], { timeZone: slotTz, weekday: 'short', month: 'short', day: 'numeric' });
+        group = { key, label, slots: [] };
+        groups.push(group);
+      }
+      group.slots.push(slot);
+    }
+    return groups;
+  })();
+  const activeSlotDay = slotDays.find(g => g.key === selectedSlotDay) || slotDays[0];
+
+  useEffect(() => {
+    if (!scheduleEnabled) return;
+    let cancelled = false;
+    setSlotsLoading(true);
+    fetch(`/api/pickup-slots?location=${encodeURIComponent(orderType === 'pickup' ? pickupLocation || '' : '')}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (cancelled || !d) return;
+        setSlots(Array.isArray(d.slots) ? d.slots : []);
+        if (d.timezone) setSlotTz(d.timezone);
+        setScheduledTime(prev => (prev && d.slots?.some(s => s.time === prev && s.available) ? prev : ''));
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSlotsLoading(false); });
+    return () => { cancelled = true; };
+  }, [scheduleEnabled, pickupLocation, orderType]);
 
   const items = cartItems ?? [];
   const tax = totalPrice * 0.07;
@@ -495,7 +541,7 @@ export default function CartPage() {
           giftCardCode: appliedGiftCard ? appliedGiftCard.code : null,
           customerEmail: customerEmail || null,
           customerPhone: customerPhone || null,
-          scheduledTime: scheduleEnabled ? new Date(scheduledTime).toISOString() : null,
+          scheduledTime: scheduleEnabled && scheduledTime ? new Date(scheduledTime).toISOString() : null,
           loyaltyPointsUsed: loyaltyPointsToRedeem,
           loyaltyToken: loyaltyToken || null,
         }),
@@ -503,6 +549,7 @@ export default function CartPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Checkout failed');
       if (data.paidWithoutStripe && data.orderId) {
+        saveLastOrder(items);
         clearCart();
         window.location.href = `/track-order?order_id=${data.orderId}`;
         return;
@@ -634,6 +681,7 @@ export default function CartPage() {
           </div>
 
           {/* Order Summary */}
+          <CartUpsell dark={false} />
           <div className="bg-gray-50 p-6 rounded-lg space-y-4">
             <h2 className="text-xl font-bold">Order Summary</h2>
 
@@ -809,17 +857,43 @@ export default function CartPage() {
               </label>
               {scheduleEnabled && (
                 <div className="mt-2 space-y-2">
-                  <input
-                    type="datetime-local"
-                    value={scheduledTime}
-                    min={toDatetimeLocal(getMinScheduledTime())}
-                    onChange={e => setScheduledTime(e.target.value)}
-                    className={`w-full border p-2 rounded text-sm ${
-                      scheduledTime && !scheduledTimeOk ? 'border-red-400 bg-red-50' : ''
-                    }`}
-                  />
-                  {scheduledTime && !scheduledTimeOk && (
-                    <p className="text-red-500 text-xs">⚠ We're not open at this time. Please pick a time within our hours.</p>
+                  {slotsLoading ? (
+                    <p className="text-xs text-gray-500">Loading pickup times…</p>
+                  ) : slotDays.length === 0 ? (
+                    <p className="text-xs text-red-500">No pickup times are available right now. Please try again later.</p>
+                  ) : (
+                    <>
+                      <div className="flex gap-2 overflow-x-auto">
+                        {slotDays.map(day => (
+                          <button
+                            type="button"
+                            key={day.key}
+                            onClick={() => { setSelectedSlotDay(day.key); setScheduledTime(''); }}
+                            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border ${activeSlotDay?.key === day.key ? 'bg-primary text-white border-primary' : 'bg-white text-gray-700'}`}
+                          >
+                            {day.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                        {activeSlotDay?.slots.map(slot => (
+                          <button
+                            type="button"
+                            key={slot.time}
+                            disabled={!slot.available}
+                            onClick={() => setScheduledTime(slot.time)}
+                            className={`py-2 rounded text-xs font-semibold border ${
+                              scheduledTime === slot.time ? 'bg-primary text-white border-primary'
+                                : slot.available ? 'bg-white hover:border-primary'
+                                : 'bg-gray-100 text-gray-400 line-through cursor-not-allowed'
+                            }`}
+                          >
+                            {formatSlotTime(slot.time)}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-gray-500">Greyed-out times are full. Please pick a time that works for you.</p>
+                    </>
                   )}
                   {storeInfo?.weeklyHours?.length > 0 && (
                     <details className="text-xs text-gray-500 bg-gray-50 rounded p-2">
@@ -972,9 +1046,9 @@ export default function CartPage() {
               )}
             </div>
 
-            {scheduleEnabled && (
+            {scheduleEnabled && scheduledTime && (
               <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-                📅 Scheduled for {new Date(scheduledTime).toLocaleString()}
+                📅 Pickup scheduled for {new Date(scheduledTime).toLocaleString([], { timeZone: slotTz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
               </p>
             )}
 
@@ -982,12 +1056,14 @@ export default function CartPage() {
               onClick={handleCheckout}
               disabled={
                 checkingOut ||
+                (scheduleEnabled && !scheduledTime) ||
                 (!storeIsOpen && (!scheduleEnabled || !scheduledTimeOk))
               }
               className="w-full bg-primary text-white px-6 py-2 rounded-full hover:bg-secondary transition duration-300 disabled:opacity-50"
             >
               {checkingOut ? 'Processing…'
                 : !storeIsOpen && !scheduleEnabled ? 'Schedule Required (Store Closed)'
+                : scheduleEnabled && !scheduledTime ? 'Choose a Pickup Time'
                 : !storeIsOpen && !scheduledTimeOk ? 'Select a Valid Time'
                 : 'Proceed to Checkout'}
             </button>

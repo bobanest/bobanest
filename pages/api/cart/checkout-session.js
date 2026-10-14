@@ -13,6 +13,7 @@ import * as yup from 'yup';
 import { POINTS_PER_DOLLAR, POINTS_PER_REWARD, REWARD_VALUE } from '../loyalty';
 import { verifyRewardToken } from '@/lib/rewardToken';
 import { saveCartSnapshot, markCartRecovered } from '@/lib/abandonedCart';
+import { isSlotAvailable } from '@/lib/pickupSlots';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const DELIVERY_FEE_AMOUNT = 4.99;
@@ -84,6 +85,11 @@ export default async function handler(req, res) {
       if (scheduledTime && !isDateTimeOpen(storeHoursDoc, new Date(scheduledTime))) {
         return res.status(400).json({ error: 'The selected time is outside our opening hours. Please choose a time when we are open.' });
       }
+    }
+
+    if (scheduledTime) {
+      const slot = await isSlotAvailable(storeHoursDoc, orderType === 'pickup' ? String(pickupLocation || '').trim() : '', scheduledTime);
+      if (!slot.ok) return res.status(400).json({ error: slot.error });
     }
 
     // Server-side coupon validation
