@@ -8,6 +8,7 @@ import GiftCardTransaction from '@/lib/models/GiftCardTransaction';
 import { sendGiftCardEmail } from '@/lib/giftCardEmail';
 import { redeemGiftCardBalance } from '@/lib/giftCardService';
 import { markCartRecovered } from '@/lib/abandonedCart';
+import { finalizeQrOrder } from '@/lib/qrOrder';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -113,6 +114,13 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error(`Webhook signature verification failed: ${err.message}`);
     return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'payment_intent.succeeded') {
+    const pi = event.data.object;
+    if (pi.metadata?.source === 'qr') {
+      try { await finalizeQrOrder(pi.id); } catch (e) { console.error('QR webhook finalize failed:', e.message); }
+    }
   }
 
   if (event.type === 'checkout.session.completed') {
