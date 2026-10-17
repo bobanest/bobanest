@@ -10,7 +10,10 @@ import { getStoreStatusAt, isDateTimeOpen } from '@/lib/storeHoursHelper';
 import { sendOwnerEmail } from '@/lib/ownerEmail';
 import { normalizeGiftCardCode, redeemGiftCardBalance } from '@/lib/giftCardService';
 import * as yup from 'yup';
-import { POINTS_PER_DOLLAR } from '../loyalty';
+import { POINTS_PER_DOLLAR, POINTS_PER_REWARD, REWARD_VALUE } from '../loyalty';
+import { verifyRewardToken } from '@/lib/rewardToken';
+import { saveCartSnapshot, markCartRecovered } from '@/lib/abandonedCart';
+import { isSlotAvailable } from '@/lib/pickupSlots';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const DELIVERY_FEE_AMOUNT = 4.99;
@@ -45,8 +48,8 @@ export default async function handler(req, res) {
     customerEmail: yup.string().email().optional().nullable(),
     customerPhone: yup.string().optional().nullable(),
     scheduledTime: yup.string().optional().nullable(),
-    loyaltyDiscount: yup.number().min(0).optional(),
     loyaltyPointsUsed: yup.number().min(0).optional(),
+    loyaltyToken: yup.string().optional().nullable(),
     couponCode: yup.string().optional().nullable(),
     referralCode: yup.string().optional().nullable(),
     giftCardCode: yup.string().optional().nullable(),
@@ -63,8 +66,8 @@ export default async function handler(req, res) {
       customerEmail,
       customerPhone,
       scheduledTime,
-      loyaltyDiscount = 0,
-      loyaltyPointsUsed = 0,
+      loyaltyPointsUsed: requestedLoyaltyPoints = 0,
+      loyaltyToken,
       couponCode,
       referralCode,
       giftCardCode,
@@ -82,6 +85,11 @@ export default async function handler(req, res) {
       if (scheduledTime && !isDateTimeOpen(storeHoursDoc, new Date(scheduledTime))) {
         return res.status(400).json({ error: 'The selected time is outside our opening hours. Please choose a time when we are open.' });
       }
+    }
+
+    if (scheduledTime) {
+      const slot = await isSlotAvailable(storeHoursDoc, orderType === 'pickup' ? String(pickupLocation || '').trim() : '', scheduledTime);
+      if (!slot.ok) return res.status(400).json({ error: slot.error });
     }
 
     // Server-side coupon validation
@@ -112,6 +120,26 @@ export default async function handler(req, res) {
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const deliveryFeeAmount = isDelivery ? DELIVERY_FEE_AMOUNT : 0;
     const discountAmount = normalizedPromotions.reduce((sum, p) => sum + (p.discountAmount || 0), 0);
+
+    // Rewards are computed server-side from the verified customer's balance; client amounts are ignored.
+    let loyaltyDiscount = 0;
+    let loyaltyPointsUsed = 0;
+    if (Number(requestedLoyaltyPoints) > 0) {
+      if (!customerEmail || !verifyRewardToken(loyaltyToken, customerEmail)) {
+        return res.status(400).json({ error: 'Please verify your email to redeem rewards.' });
+      }
+      const rewardCustomer = await Customer.findOne({ email: customerEmail.toLowerCase() }).select('points').lean();
+      const remainingForRewards = Math.max(0, subtotal - discountAmount - couponDiscount);
+      const rewards = Math.min(
+        Math.floor(Number(requestedLoyaltyPoints) / POINTS_PER_REWARD),
+        Math.floor(Number(rewardCustomer?.points || 0) / POINTS_PER_REWARD),
+        Math.ceil(remainingForRewards / REWARD_VALUE)
+      );
+      if (rewards > 0) {
+        loyaltyPointsUsed = rewards * POINTS_PER_REWARD;
+        loyaltyDiscount = Math.min(rewards * REWARD_VALUE, remainingForRewards);
+      }
+    }
     const discountedSubtotal = Math.max(0, subtotal - discountAmount - loyaltyDiscount - couponDiscount);
     if (isDelivery && discountedSubtotal <= DELIVERY_MIN_ORDER_SUBTOTAL) {
       return res.status(400).json({
@@ -197,12 +225,20 @@ export default async function handler(req, res) {
       );
     }
 
-    // Deduct loyalty points used (already validated on client, deduct optimistically)
+    // Atomically deduct the redeemed points; refuse the order if the balance changed meanwhile.
     if (loyaltyPointsUsed > 0 && customerEmail) {
-      await Customer.findOneAndUpdate(
-        { email: customerEmail.toLowerCase() },
+      const deducted = await Customer.findOneAndUpdate(
+        { email: customerEmail.toLowerCase(), points: { $gte: loyaltyPointsUsed } },
         { $inc: { points: -loyaltyPointsUsed } }
       );
+      if (!deducted) {
+        await Order.findByIdAndDelete(order._id);
+        return res.status(400).json({ error: 'Not enough reward points available.' });
+      }
+    }
+
+    if (customerEmail) {
+      saveCartSnapshot({ email: customerEmail, items, pickupLocation: safePickupLocation }).catch(() => {});
     }
 
     // Build Stripe line items (same as before, include delivery fee and discount as separate line items)
@@ -246,7 +282,7 @@ export default async function handler(req, res) {
       order.totalAmount = 0;
       order.status = 'pending';
       await order.save();
-
+      if (customerEmail) markCartRecovered(customerEmail).catch(() => {});
       if (giftCardRedeemedAmount > 0 && normalizedGiftCardCode) {
         await redeemGiftCardBalance({
           code: normalizedGiftCardCode,
