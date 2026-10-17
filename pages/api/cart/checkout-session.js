@@ -224,45 +224,21 @@ export default async function handler(req, res) {
         quantity: 1,
       });
     }
-    if (discountAmount > 0) {
-      lineItems.push({
-        price_data: {
-          currency: 'usd',
-          product_data: { name: 'Discount' },
-          unit_amount: -Math.round(discountAmount * 100),
-        },
-        quantity: 1,
+    // Stripe line items can't be negative, so all discounts go in one one-time coupon
+    const grossCents = lineItems.reduce((sum, li) => sum + li.price_data.unit_amount * li.quantity, 0);
+    const totalDiscountCents = Math.min(
+      grossCents,
+      Math.round((discountAmount + couponDiscount + loyaltyDiscount + giftCardRedeemedAmount) * 100)
+    );
+    let discounts;
+    if (totalDiscountCents > 0 && provisionalTotal > 0) {
+      const stripeCoupon = await stripe.coupons.create({
+        amount_off: totalDiscountCents,
+        currency: 'usd',
+        duration: 'once',
+        name: 'Discounts & rewards',
       });
-    }
-    if (couponDiscount > 0) {
-      lineItems.push({
-        price_data: {
-          currency: 'usd',
-          product_data: { name: `Coupon: ${validatedCouponCode}` },
-          unit_amount: -Math.round(couponDiscount * 100),
-        },
-        quantity: 1,
-      });
-    }
-    if (loyaltyDiscount > 0) {
-      lineItems.push({
-        price_data: {
-          currency: 'usd',
-          product_data: { name: 'Loyalty Reward Discount' },
-          unit_amount: -Math.round(loyaltyDiscount * 100),
-        },
-        quantity: 1,
-      });
-    }
-    if (giftCardRedeemedAmount > 0) {
-      lineItems.push({
-        price_data: {
-          currency: 'usd',
-          product_data: { name: `Gift Card (${normalizedGiftCardCode})` },
-          unit_amount: -Math.round(giftCardRedeemedAmount * 100),
-        },
-        quantity: 1,
-      });
+      discounts = [{ coupon: stripeCoupon.id }];
     }
 
     if (provisionalTotal <= 0) {
@@ -287,6 +263,7 @@ export default async function handler(req, res) {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: lineItems,
+      ...(discounts ? { discounts } : {}),
       mode: 'payment',
       success_url: `${req.headers.origin}/track-order?order_id=${order._id}`,
       cancel_url: `${req.headers.origin}/cart`,
