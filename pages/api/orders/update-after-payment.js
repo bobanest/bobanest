@@ -19,19 +19,30 @@ export default async function handler(req, res) {
     const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    // If total is already set and paid, skip
-    if (order.totalAmount > 0 && order.paymentStatus === 'paid') {
+    if (order.paymentStatus === 'paid') {
       return res.status(200).json({ order });
     }
 
-    // Compute total from items (including delivery fee and discount)
-    const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const deliveryFee = (order.orderType === 'delivery' && !order.appliedPromotions.some(p => p.type === 'free_delivery')) ? DELIVERY_FEE_AMOUNT : 0;
-    const discount = order.appliedPromotions.reduce((sum, p) => sum + p.discountAmount, 0);
-    const computedTotal = Math.max(0, subtotal + deliveryFee - discount);
+    // Only trust Stripe: the order must have a Checkout session that is actually paid
+    if (!order.stripeSessionId) {
+      return res.status(402).json({ error: 'Payment not confirmed' });
+    }
+    const session = await getStripe().checkout.sessions.retrieve(order.stripeSessionId);
+    if (session.payment_status !== 'paid' || session.metadata?.orderId !== String(order._id)) {
+      return res.status(402).json({ error: 'Payment not confirmed' });
+    }
+
+    const computedTotal = (session.amount_total || 0) / 100;
+    const claimed = await Order.findOneAndUpdate(
+      { _id: order._id, paymentStatus: { $ne: 'paid' } },
+      { $set: { totalAmount: computedTotal, paymentStatus: 'paid' } },
+      { new: true }
+    );
+    if (!claimed) {
+      return res.status(200).json({ order: await Order.findById(orderId) });
+    }
     order.totalAmount = computedTotal;
     order.paymentStatus = 'paid';
-    await order.save();
     markCartRecovered(order.customerEmail).catch(() => {});
 
     if (order.giftCardCode && Number(order.giftCardRedeemedAmount || 0) > 0) {

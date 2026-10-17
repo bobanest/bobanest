@@ -315,6 +315,8 @@ export default async function handler(req, res) {
       },
     });
 
+    await Order.updateOne({ _id: order._id }, { $set: { stripeSessionId: session.id } });
+
     res.status(200).json({ id: session.id });
   } catch (err) {
     console.error('Stripe checkout error:', err);

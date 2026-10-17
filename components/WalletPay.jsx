@@ -31,6 +31,7 @@ export default function WalletPay({ items, pickupLocation: pickupProp, onSuccess
   useEffect(() => {
     setAmount(null);
     setError('');
+    if (!pickupLocation) return undefined;
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
