@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import WalletPay from '@/components/WalletPay';
+import { getSelectedPickupLocation } from '@/components/LocationSelector';
 
 function isModifierApplicable(group, productId) {
   if (!group) return false;
@@ -21,6 +23,7 @@ export default function ProductModal({ product, onClose, onAddToCart, modifierGr
   const [reviewForm, setReviewForm] = useState({ name: '', rating: 5, comment: '' });
   const [submittingReview, setSubmittingReview] = useState(false);
   const [reviewMsg, setReviewMsg] = useState('');
+  const [paidOrder, setPaidOrder] = useState(null);
 
   useEffect(() => {
     axios.get(`/api/reviews?productId=${product._id}`)
@@ -127,29 +130,42 @@ export default function ProductModal({ product, onClose, onAddToCart, modifierGr
     return true;
   };
 
-  const handleAddToCart = () => {
-    // Build selected modifiers in the format expected by the cart
-    const selectedModifiers = modifiers.map(group => ({
-      groupName: group.name,
-      options: (() => {
-        const selected = selectedOptions[group._id];
-        if (!selected) return [];
-        if (Array.isArray(selected)) {
-          return group.options.filter(opt => selected.includes(opt._id)).map(opt => opt.name);
-        } else {
-          const opt = group.options.find(o => o._id === selected);
-          return opt ? [opt.name] : [];
-        }
-      })(),
-    })).filter(m => m.options.length > 0);
+  const buildSelectedModifiers = () => modifiers.map(group => ({
+    groupName: group.name,
+    options: (() => {
+      const selected = selectedOptions[group._id];
+      if (!selected) return [];
+      if (Array.isArray(selected)) {
+        return group.options.filter(opt => selected.includes(opt._id)).map(opt => opt.name);
+      } else {
+        const opt = group.options.find(o => o._id === selected);
+        return opt ? [opt.name] : [];
+      }
+    })(),
+  })).filter(m => m.options.length > 0);
 
+  const handleAddToCart = () => {
     onAddToCart({
       ...product,
       finalPrice: totalPrice,
-      modifiers: selectedModifiers,
+      modifiers: buildSelectedModifiers(),
     });
     onClose();
   };
+
+  if (paidOrder) {
+    return (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-[#1a0f0c] border border-white/10 rounded-3xl w-full max-w-sm p-8 text-center shadow-2xl">
+          <div className="text-4xl mb-2">🎉</div>
+          <h2 className="text-xl font-extrabold text-[#f5e6c8]">Order paid!</h2>
+          <p className="text-[#b89070] text-sm mt-2">Order # <strong className="text-[#e8a33d]">{paidOrder.trackingNumber}</strong></p>
+          <p className="text-[#b89070] text-xs mt-1">We’re preparing your {product.name}.</p>
+          <button onClick={onClose} className="mt-6 w-full bg-[#e8a33d] text-[#1a0f0c] font-extrabold py-3 rounded-2xl">Done</button>
+        </div>
+      </div>
+    );
+  }
 
   if (loadingModifiers) {
     return (
@@ -355,6 +371,15 @@ export default function ProductModal({ product, onClose, onAddToCart, modifierGr
           </div>
           {!isMandatoryFulfilled() && (
             <p className="text-center text-[#6b4e37] text-xs mt-2">Please select all required options (*)</p>
+          )}
+          {isMandatoryFulfilled() && (
+            <div className="mt-3">
+              <WalletPay
+                items={[{ id: String(product._id), quantity: 1, modifiers: buildSelectedModifiers() }]}
+                pickupLocation={getSelectedPickupLocation()}
+                onSuccess={setPaidOrder}
+              />
+            </div>
           )}
         </div>
       </div>

@@ -3,6 +3,7 @@
 import Layout from '@/components/Layout';
 import { useCart } from '@/components/CartContext';
 import CartUpsell from '@/components/CartUpsell';
+import WalletPay from '@/components/WalletPay';
 import { saveLastOrder } from '@/components/ReorderUsual';
 import Link from 'next/link';
 import { loadStripe } from '@stripe/stripe-js';
@@ -106,7 +107,19 @@ export default function CartPage() {
   const [referralValidated, setReferralValidated] = useState(null); // null | false | { referrerName }
   const [referralLoading, setReferralLoading] = useState(false);
   const [promoOpen, setPromoOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [paidOrder, setPaidOrder] = useState(null);
   const [storeInfo, setStoreInfo] = useState(null); // null = loading, treat as open
+
+  useEffect(() => {
+    if (storeInfo && !storeInfo.isOpen) setMoreOpen(true);
+  }, [storeInfo]);
+
+  const handleWalletSuccess = (order) => {
+    setPaidOrder(order);
+    clearCart();
+  };
 
   const POINTS_PER_REWARD = 100;
   const REWARD_VALUE = 5;
@@ -163,6 +176,13 @@ export default function CartPage() {
   const deliveryFee = orderType === 'delivery' ? DELIVERY_FEE_AMOUNT : 0;
   const giftCardDiscount = appliedGiftCard ? Math.min(Number(appliedGiftCard.balance || 0), Math.max(0, totalPrice + tax + deliveryFee - discount - loyaltyDiscount - couponDiscount)) : 0;
   const finalTotal = Math.max(0, totalPrice + tax + deliveryFee - discount - loyaltyDiscount - couponDiscount - giftCardDiscount);
+
+  // Quick pay covers plain pickup orders (promotions are re-applied on the server)
+  const walletEligible =
+    orderType === 'pickup' && !scheduleEnabled && storeIsOpen &&
+    !appliedCoupon && !appliedGiftCard && loyaltyDiscount === 0 && !referralValidated &&
+    items.length > 0 && !items.some(i => i.isFreeBogo);
+  const walletItems = items.map(i => ({ id: String(i.id || i._id), quantity: i.quantity, modifiers: i.modifiers || [] }));
 
   useEffect(() => {
     if (orderType === 'delivery' && !deliveryEligible) {
@@ -494,6 +514,7 @@ export default function CartPage() {
   const handleCheckout = async () => {
     if (items.length === 0) return;
     if (!customerPhone.trim()) {
+      setContactOpen(true);
       setError('Please enter your phone number so we can contact you about your order');
       return;
     }
@@ -559,6 +580,20 @@ export default function CartPage() {
       setCheckingOut(false);
     }
   };
+
+  if (paidOrder) {
+    return (
+      <Layout title="Order paid">
+        <div className="max-w-md mx-auto px-4 py-20 text-center space-y-3">
+          <h1 className="text-3xl font-bold">Thank you! 🎉</h1>
+          <p>Your order is paid and being prepared.</p>
+          <p className="text-lg">Order #: <strong>{paidOrder.trackingNumber}</strong></p>
+          <p className="text-sm text-gray-500">Pickup: {pickupLocation}</p>
+          <Link href="/track-order" className="underline">Track your order</Link>
+        </div>
+      </Layout>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -682,6 +717,19 @@ export default function CartPage() {
           <div className="bg-gray-50 p-6 rounded-lg space-y-4">
             <h2 className="text-xl font-bold">Order Summary</h2>
 
+            {walletEligible && (
+              <div>
+                <WalletPay items={walletItems} pickupLocation={pickupLocation} onSuccess={handleWalletSuccess} buttonHeight={52} />
+                <div className="flex items-center gap-3 text-xs text-gray-400 mt-3">
+                  <span className="flex-1 border-t" />or pay by card<span className="flex-1 border-t" />
+                </div>
+              </div>
+            )}
+
+            <details open={contactOpen} onToggle={e => setContactOpen(e.currentTarget.open)} className="border rounded-lg bg-white">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Contact &amp; rewards</summary>
+              <div className="px-4 pb-4 space-y-4">
+
             {/* Email for loyalty & history */}
             <div>
               <label className="block font-semibold text-sm mb-1">Your Email <span className="text-gray-400 font-normal">(for rewards & history)</span></label>
@@ -766,6 +814,8 @@ export default function CartPage() {
                 )}
               </div>
             )}
+              </div>
+            </details>
 
             {/* Order Type */}
             <div>
@@ -835,6 +885,9 @@ export default function CartPage() {
               )}
             </div>
 
+            <details open={moreOpen} onToggle={e => setMoreOpen(e.currentTarget.open)} className="border rounded-lg bg-white">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Schedule, promo code &amp; gift card</summary>
+              <div className="px-4 pb-4 space-y-4">
             {/* Order Scheduling */}
             <div>
               <label className="flex items-center gap-2 font-semibold text-sm cursor-pointer">
@@ -1023,6 +1076,8 @@ export default function CartPage() {
               )}
               {giftCardError && <p className="text-red-500 text-xs mt-1">{giftCardError}</p>}
             </div>
+              </div>
+            </details>
 
             {/* Price Breakdown */}
             <div className="pt-2 border-t space-y-1 text-sm">
