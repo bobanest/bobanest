@@ -410,9 +410,6 @@ export default function CartPage() {
           quantity: item.quantity,
           modifiers: item.modifiers || [],
         }));
-      if (discount > 0) {
-        cartItemsForStripe.push({ name: 'Discount', price: -discount, quantity: 1, modifiers: [] });
-      }
       const response = await fetch('/api/cart/checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
