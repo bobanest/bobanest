@@ -5,13 +5,25 @@ import { loadStripe } from '@stripe/stripe-js';
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
 // Apple Pay / Google Pay button for a cart (or a single customized item). Prices are always computed on the server.
-export default function WalletPay({ items, pickupLocation, onSuccess, buttonHeight = 48 }) {
+export default function WalletPay({ items, pickupLocation: pickupProp, onSuccess, buttonHeight = 48 }) {
   const mountRef = useRef(null);
   const latest = useRef({});
   const [amount, setAmount] = useState(null);
   const [available, setAvailable] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [locations, setLocations] = useState([]);
+  const [chosen, setChosen] = useState('');
+
+  useEffect(() => {
+    axios.get('/api/locations')
+      .then(({ data }) => setLocations((data || []).filter((l) => l.isActive !== false && !l.isComingSoon)))
+      .catch(() => {});
+  }, []);
+
+  const propIsValid = locations.some((l) => l.name === pickupProp);
+  const needsChoice = locations.length > 0 && !propIsValid;
+  const pickupLocation = propIsValid ? pickupProp : (chosen || locations[0]?.name || '');
 
   const itemsKey = JSON.stringify(items);
   latest.current = { items, pickupLocation, amount, onSuccess };
@@ -96,6 +108,16 @@ export default function WalletPay({ items, pickupLocation, onSuccess, buttonHeig
 
   return (
     <div>
+      {needsChoice && locations.length > 1 && (
+        <select
+          value={pickupLocation}
+          onChange={(e) => setChosen(e.target.value)}
+          className="w-full mb-2 rounded-lg border border-gray-300 bg-white text-gray-800 text-sm p-2"
+          aria-label="Pickup location"
+        >
+          {locations.map((l) => <option key={l.slug || l.name} value={l.name}>Pickup: {l.name}</option>)}
+        </select>
+      )}
       <div
         ref={mountRef}
         style={{
