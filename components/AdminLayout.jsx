@@ -14,6 +14,7 @@ const NAV_GROUPS = [
       { href: '/admin/walkin', label: 'Walk-in Log' },
       { href: '/admin/shift4-sync', label: '🔄 Shift4 Sync' },
       { href: '/admin/reviews', label: 'Reviews' },
+      { href: '/admin/tv', label: '📺 TV Menu' },
     ],
   },
   {

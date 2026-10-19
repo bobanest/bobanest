@@ -4,8 +4,7 @@ import Customer from '@/lib/models/Customer';
 import { POINTS_PER_DOLLAR } from '../loyalty';
 import { redeemGiftCardBalance } from '@/lib/giftCardService';
 import { markCartRecovered } from '@/lib/abandonedCart';
-
-const DELIVERY_FEE_AMOUNT = 4.99;
+import { getStripe } from '@/lib/qrOrder';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
