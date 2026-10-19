@@ -17,7 +17,7 @@ export default async function handler(req, res) {
       fit: doc.fit,
       slides: (doc.slides || [])
         .filter((s) => s.isActive !== false)
-        .map((s) => ({ imageUrl: s.imageUrl, durationSec: s.durationSec || 0 })),
+        .map((s) => ({ imageUrl: s.imageUrl, type: s.type || 'image', durationSec: s.durationSec || 0 })),
       version: new Date(doc.updatedAt).getTime(),
     });
   } catch (err) {

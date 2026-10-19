@@ -31,6 +31,7 @@ export default async function handler(req, res) {
         if (!isHttpUrl(s?.imageUrl)) return res.status(400).json({ error: 'Invalid image URL' });
         cleanSlides.push({
           imageUrl: s.imageUrl,
+          type: s.type === 'video' ? 'video' : 'image',
           durationSec: s.durationSec ? clamp(s.durationSec, 2, 600, 0) : 0,
           isActive: s.isActive !== false,
         });

@@ -61,17 +61,20 @@ export default function TvMenu() {
 
   // Slide timer
   const slides = cfg?.slides || [];
+  const advance = useCallback(() => setIndex((i) => (i + 1) % Math.max(1, slides.length)), [slides.length]);
   useEffect(() => {
     if (!started || slides.length < 2) return undefined;
     const cur = slides[index % slides.length];
+    // Videos without a custom duration advance when they finish playing
+    if (cur?.type === 'video' && !cur.durationSec) return undefined;
     const secs = cur?.durationSec || cfg.defaultDuration || 10;
-    const t = setTimeout(() => setIndex((i) => (i + 1) % slides.length), secs * 1000);
+    const t = setTimeout(advance, secs * 1000);
     return () => clearTimeout(t);
-  }, [started, index, slides, cfg]);
+  }, [started, index, slides, cfg, advance]);
 
   // Preload every image so changes are instant
   useEffect(() => {
-    slides.forEach((s) => { const i = new Image(); i.src = s.imageUrl; });
+    slides.forEach((s) => { if (s.type !== 'video') { const i = new Image(); i.src = s.imageUrl; } });
   }, [slides]);
 
   // Hide cursor when idle, re-acquire wake lock and fullscreen on tab return
@@ -125,7 +128,7 @@ export default function TvMenu() {
     <div
       onClick={() => { if (started) enterFullscreen(); }}
       style={{
-        position: 'fixed', inset: 0, background: '#000', overflow: 'hidden',
+        position: 'fixed', top: 0, left: 0, width: '100vw', height: '100dvh', background: '#000', overflow: 'hidden',
         cursor: started && cursorHidden ? 'none' : 'default',
       }}
     >
@@ -133,19 +136,51 @@ export default function TvMenu() {
         <title>TV Menu</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="robots" content="noindex" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#000000" />
+        <style>{'html,body{margin:0;padding:0;background:#000;overflow:hidden;height:100%}'}</style>
       </Head>
 
       {started && slides.map((s, i) => {
         const active = i === index % slides.length;
-        const style = {
-          position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit,
+        const isVideo = s.type === 'video';
+        const wrap = {
+          position: 'absolute', inset: 0,
           transition: transition === 'none' ? 'none' : 'opacity 0.8s ease, transform 0.8s ease',
           opacity: active ? 1 : 0,
           transform: transition === 'slide' ? `translateX(${active ? 0 : i < index % slides.length ? '-100%' : '100%'})` : 'none',
           pointerEvents: 'none',
         };
-        // eslint-disable-next-line @next/next/no-img-element
-        return <img key={`${i}-${s.imageUrl}`} src={s.imageUrl} alt="" style={style} />;
+        const media = { position: 'absolute', inset: 0, width: '100%', height: '100%' };
+        // For "fit whole image", fill the leftover area with a blurred copy instead of black bars
+        const blurBg = fit === 'contain' && !isVideo;
+        return (
+          <div key={`${i}-${s.imageUrl}`} style={wrap}>
+            {blurBg && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={s.imageUrl} alt="" style={{ ...media, objectFit: 'cover', filter: 'blur(40px) brightness(0.6)', transform: 'scale(1.2)' }} />
+            )}
+            {isVideo ? (
+              active && (
+                <video
+                  src={s.imageUrl}
+                  autoPlay
+                  muted
+                  playsInline
+                  loop={slides.length < 2 || !!s.durationSec}
+                  onEnded={advance}
+                  onError={advance}
+                  style={{ ...media, objectFit: fit }}
+                />
+              )
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={s.imageUrl} alt="" style={{ ...media, objectFit: fit }} />
+            )}
+          </div>
+        );
       })}
 
       {started && cfg && slides.length === 0 && (

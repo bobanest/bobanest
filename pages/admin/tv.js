@@ -8,15 +8,19 @@ const CLOUD = 'dyo42wvne';
 const PRESET = 'bobanest_preset';
 
 async function uploadImage(file) {
+  const isVideo = file.type.startsWith('video/');
+  if (isVideo && file.size > 100 * 1024 * 1024) throw new Error('Video must be under 100MB');
   const fd = new FormData();
   fd.append('file', file);
   fd.append('upload_preset', PRESET);
   fd.append('folder', 'bobanest/tv');
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, { method: 'POST', body: fd });
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/${isVideo ? 'video' : 'image'}/upload`, { method: 'POST', body: fd });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   if (!data.secure_url) throw new Error('Upload failed');
-  return data.secure_url;
+  // f_mp4 + q_auto gives a compact, iPad-compatible H.264 file
+  const url = isVideo ? data.secure_url.replace('/upload/', '/upload/f_mp4,vc_h264,q_auto/').replace(/\.[a-z0-9]+$/i, '.mp4') : data.secure_url;
+  return { url, type: isVideo ? 'video' : 'image' };
 }
 
 export default function AdminTv() {
@@ -59,11 +63,11 @@ export default function AdminTv() {
     setUploading(true);
     setMsg('');
     try {
-      const urls = [];
-      for (const f of Array.from(files)) urls.push(await uploadImage(f));
+      const items = [];
+      for (const f of Array.from(files)) items.push(await uploadImage(f));
       setCfg((c) => ({
         ...c,
-        slides: [...c.slides, ...urls.map((imageUrl) => ({ imageUrl, durationSec: 0, isActive: true }))],
+        slides: [...c.slides, ...items.map((u) => ({ imageUrl: u.url, type: u.type, durationSec: 0, isActive: true }))],
       }));
       setMsg('Uploaded. Click Save to publish.');
     } catch (e) {
@@ -77,7 +81,8 @@ export default function AdminTv() {
     if (!file) return;
     setUploading(true);
     try {
-      updateSlide(i, { imageUrl: await uploadImage(file) });
+      const u = await uploadImage(file);
+      updateSlide(i, { imageUrl: u.url, type: u.type });
       setMsg('Replaced. Click Save to publish.');
     } catch (e) {
       setMsg(`Upload error: ${e.message}`);
@@ -163,21 +168,25 @@ export default function AdminTv() {
 
               <div className="bg-white border rounded-lg p-4 mb-4">
                 <label className="inline-block px-4 py-2 bg-blue-600 text-white rounded cursor-pointer">
-                  {uploading ? 'Uploading…' : '+ Upload images'}
-                  <input type="file" accept="image/*" multiple className="hidden" disabled={uploading}
+                  {uploading ? 'Uploading…' : '+ Upload images / MP4 videos'}
+                  <input type="file" accept="image/*,video/mp4,video/quicktime,video/webm" multiple className="hidden" disabled={uploading}
                     onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
                 </label>
-                <span className="text-xs text-gray-500 ml-3">Use 16:9 images (1920×1080) for TVs.</span>
+                <span className="text-xs text-gray-500 ml-3">Use 16:9 images/videos (1920×1080). Videos play muted; keep them short (under 30s).</span>
 
                 <div className="mt-4 grid gap-3">
                   {cfg.slides.length === 0 && <div className="text-gray-500 text-sm">No images yet.</div>}
                   {cfg.slides.map((s, i) => (
                     <div key={`${i}-${s.imageUrl}`} className={`flex flex-wrap gap-3 items-center border rounded p-2 ${s.isActive ? '' : 'opacity-50'}`}>
                       <span className="font-bold w-6 text-center">{i + 1}</span>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={s.imageUrl} alt="" className="w-40 h-24 object-contain bg-gray-100 rounded" />
+                      {s.type === 'video' ? (
+                        <video src={s.imageUrl} muted playsInline preload="metadata" className="w-40 h-24 object-contain bg-black rounded" />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={s.imageUrl} alt="" className="w-40 h-24 object-contain bg-gray-100 rounded" />
+                      )}
                       <label className="text-xs">
-                        Seconds (0 = default)
+                        {s.type === 'video' ? '🎬 Seconds (0 = play full video)' : 'Seconds (0 = default)'}
                         <input type="number" min={0} max={600} value={s.durationSec || 0}
                           onChange={(e) => updateSlide(i, { durationSec: Number(e.target.value) })}
                           className="block w-24 border rounded px-2 py-1" />
@@ -190,7 +199,7 @@ export default function AdminTv() {
                         <button className="px-2 py-1 border rounded" onClick={() => move(i, 1)} disabled={i === cfg.slides.length - 1}>↓</button>
                         <label className="px-2 py-1 border rounded cursor-pointer text-sm">
                           Replace
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => { replaceImage(i, e.target.files?.[0]); e.target.value = ''; }} />
+                          <input type="file" accept="image/*,video/mp4,video/quicktime,video/webm" className="hidden" onChange={(e) => { replaceImage(i, e.target.files?.[0]); e.target.value = ''; }} />
                         </label>
                         <button className="px-2 py-1 border rounded text-red-600" onClick={() => remove(i)}>Delete</button>
                       </div>
