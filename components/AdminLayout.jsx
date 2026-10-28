@@ -62,6 +62,7 @@ const NAV_GROUPS = [
       { href: '/admin/onboarding', label: '🆕 Onboarding' },
       { href: '/admin/guides', label: '📘 Staff Guides' },
       { href: '/admin/employee-schedule', label: '🗓️ Work Schedule' },
+      { href: '/admin/sales-reports', label: '📈 Daily Sales Reports' },
       { href: '/admin/payments', label: '💰 Payroll' },
       { href: '/admin/attendance-manual', label: '🕒 Manual Clock Entry' },
       { href: '/admin/payment-records', label: '💳 Payment Records' },
