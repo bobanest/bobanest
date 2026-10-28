@@ -59,6 +59,8 @@ const NAV_GROUPS = [
     label: 'HR & Staff',
     links: [
       { href: '/admin/employees', label: '👥 Employees' },
+      { href: '/admin/onboarding', label: '🆕 Onboarding' },
+      { href: '/admin/guides', label: '📘 Staff Guides' },
       { href: '/admin/employee-schedule', label: '🗓️ Work Schedule' },
       { href: '/admin/payments', label: '💰 Payroll' },
       { href: '/admin/attendance-manual', label: '🕒 Manual Clock Entry' },
