@@ -26,13 +26,14 @@ function parseShiftPayload(body = {}) {
   const endAt = new Date(body.endAt);
   const title = String(body.title || 'Shift').trim() || 'Shift';
   const notes = String(body.notes || '').trim();
+  const location = String(body.location || '').trim().toLowerCase().slice(0, 80);
 
   if (!employeeId) return { error: 'employeeId is required' };
   if (Number.isNaN(startAt.getTime())) return { error: 'startAt is invalid' };
   if (Number.isNaN(endAt.getTime())) return { error: 'endAt is invalid' };
   if (endAt <= startAt) return { error: 'endAt must be after startAt' };
 
-  return { employeeId, startAt, endAt, title, notes };
+  return { employeeId, startAt, endAt, title, notes, location };
 }
 
 export default async function handler(req, res) {
@@ -68,6 +69,7 @@ export default async function handler(req, res) {
       endAt: parsed.endAt,
       title: parsed.title,
       notes: parsed.notes,
+      location: parsed.location,
       createdBy: 'admin',
     });
     const populated = await EmployeeSchedule.findById(created._id).populate('employee').lean();
@@ -93,6 +95,7 @@ export default async function handler(req, res) {
           endAt: parsed.endAt,
           title: parsed.title,
           notes: parsed.notes,
+          location: parsed.location,
         },
       },
       { new: true, runValidators: true }

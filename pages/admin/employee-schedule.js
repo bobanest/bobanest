@@ -66,12 +66,23 @@ export default function AdminEmployeeSchedulePage() {
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('');
   const [editingId, setEditingId] = useState('');
+  const [locations, setLocations] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/locations')
+      .then((r) => r.json())
+      .then((d) => setLocations((Array.isArray(d) ? d : d.locations || []).filter((l) => l.isActive !== false)))
+      .catch(() => {});
+  }, []);
+
+  const locationName = (slug) => locations.find((l) => l.slug === slug)?.name || slug || '';
 
   const [form, setForm] = useState({
     employeeId: '',
     title: 'Shift',
     ...getDefaultShiftRange(),
     notes: '',
+    location: '',
   });
 
   async function fetchEmployees() {
@@ -152,6 +163,7 @@ export default function AdminEmployeeSchedulePage() {
         startAt: new Date(form.startAt).toISOString(),
         endAt: new Date(form.endAt).toISOString(),
         notes: form.notes || '',
+        location: form.location || '',
       };
       const endpoint = '/api/admin/employee-schedules';
       const method = editingId ? 'PUT' : 'POST';
@@ -177,6 +189,7 @@ export default function AdminEmployeeSchedulePage() {
         title: 'Shift',
         ...getDefaultShiftRange(),
         notes: '',
+        location: '',
       });
     } catch (err) {
       setMsg(err.message || 'Failed to save schedule');
@@ -207,6 +220,7 @@ export default function AdminEmployeeSchedulePage() {
       startAt: toDatetimeLocalInput(shift.startAt),
       endAt: toDatetimeLocalInput(shift.endAt),
       notes: shift.notes || '',
+      location: shift.location || '',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -218,6 +232,7 @@ export default function AdminEmployeeSchedulePage() {
       title: 'Shift',
       ...getDefaultShiftRange(),
       notes: '',
+      location: '',
     });
   }
 
@@ -354,6 +369,7 @@ export default function AdminEmployeeSchedulePage() {
                                 className="w-full text-left text-[11px] bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded px-2 py-1"
                               >
                                 <div className="font-semibold truncate">{shift.employee?.name || 'Unknown'}</div>
+                                {shift.location && <div className="truncate opacity-80">📍 {locationName(shift.location)}</div>}
                                 <div>
                                   {new Date(shift.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(shift.endAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
@@ -379,7 +395,14 @@ export default function AdminEmployeeSchedulePage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Employee</label>
                     <select
                       value={form.employeeId}
-                      onChange={(e) => setForm((prev) => ({ ...prev, employeeId: e.target.value }))}
+                      onChange={(e) => {
+                        const emp = employees.find((x) => x._id === e.target.value);
+                        setForm((prev) => ({
+                          ...prev,
+                          employeeId: e.target.value,
+                          location: !prev.location && emp?.locations?.length === 1 ? emp.locations[0] : prev.location,
+                        }));
+                      }}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2"
                       required
                     >
@@ -388,6 +411,20 @@ export default function AdminEmployeeSchedulePage() {
                         <option key={emp._id} value={emp._id}>
                           {emp.name} ({emp.assignedId || 'No ID'})
                         </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Store location</label>
+                    <select
+                      value={form.location}
+                      onChange={(e) => setForm((prev) => ({ ...prev, location: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    >
+                      <option value="">No location</option>
+                      {locations.map((l) => (
+                        <option key={l.slug} value={l.slug}>{l.name}</option>
                       ))}
                     </select>
                   </div>
