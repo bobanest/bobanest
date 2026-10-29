@@ -66,6 +66,7 @@ export default function AdminOrders() {
                   <th className="p-2 text-left">Promotions</th>
                   <th className="p-2 text-left">Total</th>
                   <th className="p-2 text-left">Type</th>
+                  <th className="p-2 text-left">Store</th>
                   <th className="p-2 text-left">Delivery Address</th>
                   <th className="p-2 text-left">Status</th>
                   <th className="p-2 text-left">Actions</th>
@@ -109,6 +110,7 @@ export default function AdminOrders() {
                     </td>
                     <td className="p-2 align-top">${order.totalAmount?.toFixed(2) || '0.00'}</td>
                     <td className="p-2 align-top capitalize">{order.orderType}</td>
+                    <td className="p-2 align-top font-medium">{order.pickupLocation || '—'}</td>
                     <td className="p-2 align-top">
                       {order.orderType === 'delivery' ? order.deliveryAddress : '—'}
                     </td>

@@ -206,7 +206,7 @@ export default async function handler(req, res) {
 
         // SMS owner
         const itemSummary = (order.items || []).map(i => `${i.quantity}x ${i.name}`).join(', ');
-        const smsBody = `🧋 New Order #${order.trackingNumber}!\n${order.customerName} · ${order.customerPhone || 'no phone'}\n${order.orderType.toUpperCase()}\n${itemSummary}\nTotal: $${order.totalAmount.toFixed(2)}`;
+        const smsBody = `🧋 New Order #${order.trackingNumber}!\n${order.customerName} · ${order.customerPhone || 'no phone'}\n${order.orderType.toUpperCase()}${order.pickupLocation ? ` · ${order.pickupLocation}` : ''}\n${itemSummary}\nTotal: $${order.totalAmount.toFixed(2)}`;
         await sendOwnerSMS(smsBody);
 
         // Email owner
@@ -222,6 +222,7 @@ export default async function handler(req, res) {
             <p><strong>Email:</strong> ${order.customerEmail || 'N/A'}</p>
             <p><strong>Phone:</strong> ${order.customerPhone || 'N/A'}</p>
             <p><strong>Type:</strong> ${String(order.orderType || 'pickup').toUpperCase()}</p>
+            <p><strong>Store:</strong> ${order.pickupLocation || 'N/A'}</p>
             <p><strong>Total:</strong> $${Number(order.totalAmount || 0).toFixed(2)}</p>
             <p><strong>Items:</strong></p>
             <ul>${itemsHtml}</ul>

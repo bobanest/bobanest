@@ -128,6 +128,7 @@ export default function TrackOrder() {
           <div className="bg-white rounded shadow p-6">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold">Order #{order.trackingNumber}</h2>
+              {order.pickupLocation && <p className="font-semibold text-gray-800">Pickup: {order.pickupLocation}</p>}
               <p className="text-gray-600">
                 Placed on {new Date(order.createdAt).toLocaleString('en-US', {
                   year: 'numeric',

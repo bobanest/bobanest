@@ -206,6 +206,7 @@ export default async function handler(req, res) {
       <h3>New Order Placed (Pending Payment)</h3>
       <p><strong>Tracking #:</strong> ${trackingNumber}</p>
       <p><strong>Type:</strong> ${orderType.toUpperCase()}</p>
+      ${safePickupLocation ? `<p><strong>Store:</strong> ${safePickupLocation}</p>` : ''}
       ${isDelivery ? `<p><strong>Address:</strong> ${safeDeliveryAddress}</p>` : ''}
       <p><strong>Email:</strong> ${customerEmail || 'N/A'}</p>
       <p><strong>Phone:</strong> ${customerPhone || 'N/A'}</p>

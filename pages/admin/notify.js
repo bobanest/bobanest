@@ -202,6 +202,7 @@ export default function NotifyPage() {
                   <div>
                     <p className="text-white font-bold text-xl">NEW ORDER #{order.trackingNumber}</p>
                     <p className="text-red-100 text-sm">{timeAgo(order.createdAt)}</p>
+                    {order.pickupLocation && <p className="text-white font-semibold text-sm mt-0.5">🏪 {order.pickupLocation}</p>}
                   </div>
                   <span className="bg-white text-red-600 font-bold px-3 py-1 rounded-full text-sm uppercase">
                     {order.orderType}
